@@ -192,6 +192,7 @@
         </div>
         <div class="settings-grid" style="margin-top:10px">
           <div><label class="field-label">Sheet Sync URL</label><input id="settingsSyncUrl" class="field-input" placeholder="Apps Script deployment URL"><div class="auth-note">Paste the Apps Script web app URL to sync entries to Google Sheets in real-time.</div><button class="btn-dark" style="margin-top:6px" onclick="updateSyncUrl()">Save Sync URL</button></div>
+          <div><label class="field-label">Buildium API URL</label><input id="settingsBuildiumUrl" class="field-input" placeholder="ZRE Buildium API deployment URL"><div class="auth-note">Paste the ZRE Buildium API web app URL to auto-create bills when archiving a pay period.</div><button class="btn-dark" style="margin-top:6px" onclick="updateBuildiumUrl()">Save Buildium URL</button></div>
         </div>
         <div style="margin-top:8px"><label class="field-label">Daily Reminder</label>
           <div style="display:flex;align-items:center;gap:8px"><input type="checkbox" id="reminderToggle" onchange="toggleReminder()" style="accent-color:var(--accent)"><label for="reminderToggle" style="font-size:12px;color:var(--text-dim)">Enable 6 PM daily reminder</label></div>
@@ -288,9 +289,10 @@ function doLogout(){clearSession();sessionStorage.removeItem("zrem-session-temp"
 function updateApiKey(){const k=document.getElementById("settingsApiKey").value.trim();if(!k)return alert("Enter a key.");const a=getAuth();if(a){a.apiKey=k;setAuth(a)}state.apiKey=k;saveState();document.getElementById("settingsApiKey").value="";alert("Key updated.")}
 function updatePassword(){const pw=document.getElementById("settingsNewPassword").value;if(!pw||pw.length<4)return alert("4+ chars.");const a=getAuth();if(a){a.passwordHash=simpleHash(pw);setAuth(a)}document.getElementById("settingsNewPassword").value="";alert("Password updated.")}
 function updateSyncUrl(){const u=document.getElementById("settingsSyncUrl").value.trim();state.syncUrl=u;saveState();document.getElementById("settingsSyncUrl").value="";if(u){alert("Sync URL saved. Entries will sync to Google Sheets.");syncToSheet()}else{alert("Sync URL cleared. Sheet sync disabled.");updateSyncIndicator()}}
+function updateBuildiumUrl(){const u=document.getElementById("settingsBuildiumUrl").value.trim();state.buildiumUrl=u;saveState();document.getElementById("settingsBuildiumUrl").value="";alert(u?"Buildium URL saved. Bills will be created when you archive a pay period.":"Buildium URL cleared. Auto-bill disabled.")}
 
 // ═══ STATE ═══
-let state={workerName:"Martin",payPeriodStart:toISO(new Date()),entries:[],chatHistory:[],apiKey:"",archive:[],syncUrl:""};
+let state={workerName:"Martin",payPeriodStart:toISO(new Date()),entries:[],chatHistory:[],apiKey:"",archive:[],syncUrl:"",buildiumUrl:""};
 let isProcessing=false;
 let syncTimer=null;
 
@@ -303,11 +305,11 @@ function weekHours(entries,dates){return dates.reduce((sum,d)=>sum+entries.filte
 function timeStr(){return new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"})}
 function escHtml(s){return(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/\n/g,"<br>")}
 
-function loadState(){try{const r=localStorage.getItem("zrem-tracker");if(r){const d=JSON.parse(r);Object.assign(state,d);if(!state.archive)state.archive=[];if(!state.syncUrl)state.syncUrl="";}}catch{}}
+function loadState(){try{const r=localStorage.getItem("zrem-tracker");if(r){const d=JSON.parse(r);Object.assign(state,d);if(!state.archive)state.archive=[];if(!state.syncUrl)state.syncUrl="";if(!state.buildiumUrl)state.buildiumUrl="";}}catch{}}
 function saveState(){
   state.workerName=document.getElementById("workerName")?.value||state.workerName;
   state.payPeriodStart=document.getElementById("payPeriodStart")?.value||state.payPeriodStart;
-  try{localStorage.setItem("zrem-tracker",JSON.stringify({workerName:state.workerName,payPeriodStart:state.payPeriodStart,entries:state.entries,chatHistory:state.chatHistory.slice(-40),archive:state.archive,syncUrl:state.syncUrl}))}catch{}
+  try{localStorage.setItem("zrem-tracker",JSON.stringify({workerName:state.workerName,payPeriodStart:state.payPeriodStart,entries:state.entries,chatHistory:state.chatHistory.slice(-40),archive:state.archive,syncUrl:state.syncUrl,buildiumUrl:state.buildiumUrl}))}catch{}
   clearTimeout(syncTimer);
   syncTimer=setTimeout(syncToSheet,2000);
 }
@@ -391,17 +393,45 @@ function initReminder(){
 }
 
 // ═══ ARCHIVE ═══
-function archivePeriod(){
+async function archivePeriod(){
   if(state.entries.length===0){alert("No entries to archive.");return}
   const pd=getPayDates(state.payPeriodStart);
   const label=`${fmtDate(pd[0])} – ${fmtDate(pd[13])}`;
   if(!confirm(`Archive this pay period?\n\n${label}\n${state.entries.length} entries\n\nThis will save the period and clear current entries for a new period.`))return;
   const totalHrs=state.entries.reduce((s,e)=>s+e.hours,0);
+
+  // Submit bill to Buildium if configured
+  let buildiumBillId=null;
+  if(state.buildiumUrl){
+    try{
+      const payload={
+        action:'zrem-bill',
+        workerName:state.workerName,
+        payPeriodStart:pd[0],
+        payPeriodEnd:pd[13],
+        hourlyRate:HOURLY_RATE,
+        entries:state.entries
+      };
+      const resp=await fetch(state.buildiumUrl,{method:'POST',headers:{'Content-Type':'text/plain'},body:JSON.stringify(payload),redirect:'follow'});
+      const text=await resp.text();
+      const result=JSON.parse(text);
+      if(result.success){
+        buildiumBillId=result.billId;
+        alert(`Buildium bill created!\n\nBill #${result.billId}\n${result.lineCount} line items — $${result.totalAmount.toFixed(2)}${result.warnings?'\n\n⚠️ '+result.warnings:''}`);
+      }else{
+        if(!confirm(`Buildium bill failed: ${result.error}\n\nArchive anyway without creating the bill?`))return;
+      }
+    }catch(err){
+      if(!confirm(`Buildium connection error: ${err.message}\n\nArchive anyway without creating the bill?`))return;
+    }
+  }
+
   state.archive.push({
     id:Date.now(),periodStart:state.payPeriodStart,label,
     entries:[...state.entries],workerName:state.workerName,
     totalHours:totalHrs,totalBilled:totalHrs*HOURLY_RATE,
-    archivedAt:new Date().toISOString(),entryCount:state.entries.length
+    archivedAt:new Date().toISOString(),entryCount:state.entries.length,
+    buildiumBillId:buildiumBillId
   });
   // Advance pay period by 14 days
   const nextStart=new Date(parseDate(state.payPeriodStart));
@@ -426,7 +456,7 @@ function renderArchive(){
       <div style="display:flex;justify-content:space-between;align-items:center">
         <div><div style="font-size:14px;font-weight:600">${a.label}</div>
         <div style="font-size:12px;color:var(--text-dim);margin-top:2px">${a.entryCount} entries · ${a.totalHours.toFixed(1)} hrs · $${a.totalBilled.toFixed(2)}</div>
-        <div style="font-size:11px;color:var(--text-dimmer);margin-top:2px">${a.workerName} · Archived ${new Date(a.archivedAt).toLocaleDateString()}</div></div>
+        <div style="font-size:11px;color:var(--text-dimmer);margin-top:2px">${a.workerName} · Archived ${new Date(a.archivedAt).toLocaleDateString()}${a.buildiumBillId?' · <span style="color:var(--success)">Buildium #'+a.buildiumBillId+'</span>':''}</div></div>
         <div style="font-size:20px;color:var(--border2)">›</div>
       </div>
     </div>`;
@@ -548,7 +578,7 @@ function init(){
 }
 function updateSendBtn(){const v=document.getElementById("chatInput").value.trim();document.getElementById("chatSendBtn").className=v?"chat-send active":"chat-send inactive"}
 function switchView(id){document.querySelectorAll(".view").forEach(v=>v.classList.remove("active"));document.querySelectorAll(".tab").forEach(t=>t.classList.remove("active"));document.getElementById("view-"+id).classList.add("active");document.querySelector(`.tab[data-view="${id}"]`)?.classList.add("active");render()}
-function toggleSettings(){document.getElementById("settingsPanel").classList.toggle("open");const su=document.getElementById("settingsSyncUrl");if(su&&state.syncUrl)su.placeholder=state.syncUrl.slice(0,50)+"..."}
+function toggleSettings(){document.getElementById("settingsPanel").classList.toggle("open");const su=document.getElementById("settingsSyncUrl");if(su&&state.syncUrl)su.placeholder=state.syncUrl.slice(0,50)+"...";const bu=document.getElementById("settingsBuildiumUrl");if(bu&&state.buildiumUrl)bu.placeholder=state.buildiumUrl.slice(0,50)+"..."}
 function toggleManualForm(){document.getElementById("manualForm").classList.toggle("open");renderManualForm()}
 
 // ═══ SYSTEM PROMPT ═══
