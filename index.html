@@ -144,17 +144,31 @@
     <div class="auth-subtitle">One-time setup — configure the app and create login credentials.</div>
     <div id="adminError" class="auth-error"></div>
     <div class="auth-field"><label class="field-label">API Key (Anthropic)</label><input id="adminApiKey" type="password" class="field-input" placeholder="sk-ant-..."><div class="auth-note">Stored in this browser only. Powers the AI chat.</div></div>
-    <div class="auth-field"><label class="field-label">Technician Name</label><input id="adminWorkerName" class="field-input" value="Martin"></div>
+    <div class="auth-field"><label class="field-label">Your Name</label><input id="adminWorkerName" class="field-input" placeholder="e.g. Nick"></div>
     <div class="auth-field"><label class="field-label">Pay Period Start Date</label><input id="adminPayDate" type="date" class="field-input"></div>
     <div class="auth-divider">Admin Account (You)</div>
     <div class="auth-field"><label class="field-label">Admin Username</label><input id="adminUsername" class="field-input" placeholder="e.g. nick"></div>
     <div class="auth-field"><label class="field-label">Admin Password</label><input id="adminPassword" type="password" class="field-input" placeholder="Choose a password"></div>
     <div class="auth-field"><label class="field-label">Confirm Admin Password</label><input id="adminPasswordConfirm" type="password" class="field-input" placeholder="Re-enter password"></div>
-    <div class="auth-divider">Worker Account (Martin)</div>
-    <div class="auth-field"><label class="field-label">Worker Username</label><input id="workerUsername" class="field-input" placeholder="e.g. martin"></div>
-    <div class="auth-field"><label class="field-label">Worker Password</label><input id="workerPassword" type="password" class="field-input" placeholder="Choose a password"></div>
-    <div class="auth-field"><label class="field-label">Confirm Worker Password</label><input id="workerPasswordConfirm" type="password" class="field-input" placeholder="Re-enter password"></div>
     <button class="auth-btn" onclick="completeAdminSetup()">Complete Setup</button>
+    <div class="auth-note" style="text-align:center;margin-top:12px">Worker accounts are created separately — share the app link with your technician so they can register themselves.</div>
+  </div>
+</div>
+
+<!-- WORKER REGISTRATION -->
+<div id="workerRegScreen" class="auth-screen" style="display:none">
+  <div class="auth-card fade-in">
+    <div class="auth-logo"><div><div class="brand">ZREM</div><div class="brand-sub">WORKER REGISTRATION</div></div></div>
+    <div class="auth-subtitle">Create your worker account to start logging hours.</div>
+    <div id="workerRegError" class="auth-error"></div>
+    <div class="auth-field"><label class="field-label">Your Name</label><input id="regWorkerName" class="field-input" placeholder="e.g. Martin"></div>
+    <div class="auth-field"><label class="field-label">Pay Period Start Date</label><input id="regPayDate" type="date" class="field-input"></div>
+    <div class="auth-divider">Login Credentials</div>
+    <div class="auth-field"><label class="field-label">Username</label><input id="regWorkerUsername" class="field-input" placeholder="Choose a username"></div>
+    <div class="auth-field"><label class="field-label">Password</label><input id="regWorkerPassword" type="password" class="field-input" placeholder="Choose a password"></div>
+    <div class="auth-field"><label class="field-label">Confirm Password</label><input id="regWorkerPasswordConfirm" type="password" class="field-input" placeholder="Re-enter password"></div>
+    <button class="auth-btn" onclick="completeWorkerReg()">Create Account</button>
+    <button class="auth-btn-secondary" onclick="showScreen('loginScreen')">Back to Login</button>
   </div>
 </div>
 
@@ -170,6 +184,7 @@
     <div class="auth-field" style="display:flex;align-items:center;gap:8px"><input type="checkbox" id="loginRemember" checked style="accent-color:var(--accent)"><label for="loginRemember" style="font-size:12px;color:var(--text-dim);cursor:pointer">Keep me logged in</label></div>
     <button class="auth-btn" onclick="doLogin()">Sign In</button>
     <div class="auth-note" style="text-align:center;margin-top:12px">With "Keep me logged in" checked, you won't need to sign in again.</div>
+    <button class="auth-btn-secondary" id="workerRegLink" onclick="showWorkerReg()" style="display:none">New technician? Create worker account</button>
     <button class="auth-btn-secondary" onclick="showAdminSetup()">Admin: Reconfigure</button>
   </div>
 </div>
@@ -267,25 +282,45 @@ function setAuth(d){localStorage.setItem("zrem-auth",JSON.stringify(d))}
 function getSession(){try{return JSON.parse(localStorage.getItem("zrem-session"))||null}catch{return null}}
 function setSession(d){localStorage.setItem("zrem-session",JSON.stringify(d))}
 function clearSession(){localStorage.removeItem("zrem-session")}
-function showScreen(id){["adminSetupScreen","loginScreen","mainApp"].forEach(s=>document.getElementById(s).style.display="none");document.getElementById(id).style.display="flex"}
+function showScreen(id){["adminSetupScreen","workerRegScreen","loginScreen","mainApp"].forEach(s=>document.getElementById(s).style.display="none");document.getElementById(id).style.display="flex"}
 function showAdminSetup(){const a=getAuth();if(a){const pw=prompt("Enter admin password:");const hash=simpleHash(pw||"");const valid=a.admin?hash===a.admin.passwordHash:hash===a.passwordHash;if(!pw||!valid){alert("Incorrect.");return;}}document.getElementById("adminPayDate").value=toISO(new Date());showScreen("adminSetupScreen")}
 function completeAdminSetup(){
   const key=document.getElementById("adminApiKey").value.trim(),name=document.getElementById("adminWorkerName").value.trim(),date=document.getElementById("adminPayDate").value;
   const adminUser=document.getElementById("adminUsername").value.trim().toLowerCase(),adminPw=document.getElementById("adminPassword").value,adminPwC=document.getElementById("adminPasswordConfirm").value;
-  const workerUser=document.getElementById("workerUsername").value.trim().toLowerCase(),workerPw=document.getElementById("workerPassword").value,workerPwC=document.getElementById("workerPasswordConfirm").value;
   const err=document.getElementById("adminError");err.style.display="none";
   if(!key){err.textContent="API key required.";err.style.display="block";return}
   if(!adminUser||adminUser.length<2){err.textContent="Admin username must be 2+ chars.";err.style.display="block";return}
   if(!adminPw||adminPw.length<4){err.textContent="Admin password must be 4+ chars.";err.style.display="block";return}
   if(adminPw!==adminPwC){err.textContent="Admin passwords don't match.";err.style.display="block";return}
-  if(!workerUser||workerUser.length<2){err.textContent="Worker username must be 2+ chars.";err.style.display="block";return}
-  if(!workerPw||workerPw.length<4){err.textContent="Worker password must be 4+ chars.";err.style.display="block";return}
-  if(workerPw!==workerPwC){err.textContent="Worker passwords don't match.";err.style.display="block";return}
-  if(adminUser===workerUser){err.textContent="Admin and worker usernames must be different.";err.style.display="block";return}
-  setAuth({admin:{username:adminUser,passwordHash:simpleHash(adminPw)},worker:{username:workerUser,passwordHash:simpleHash(workerPw)},apiKey:key});
+  const auth=getAuth()||{};
+  auth.admin={username:adminUser,passwordHash:simpleHash(adminPw)};
+  auth.apiKey=key;
+  setAuth(auth);
   state.workerName=name||"Martin";if(date)state.payPeriodStart=date;state.apiKey=key;saveState();
   setSession({loggedIn:true,user:adminUser,role:"admin",persistent:true});
   showScreen("mainApp");document.getElementById("headerUser").textContent=adminUser;document.getElementById("adminSettingsSection").style.display="block";render();
+}
+function showWorkerReg(){document.getElementById("regPayDate").value=toISO(new Date());showScreen("workerRegScreen")}
+function completeWorkerReg(){
+  const name=document.getElementById("regWorkerName").value.trim();
+  const date=document.getElementById("regPayDate").value;
+  const user=document.getElementById("regWorkerUsername").value.trim().toLowerCase();
+  const pw=document.getElementById("regWorkerPassword").value;
+  const pwC=document.getElementById("regWorkerPasswordConfirm").value;
+  const err=document.getElementById("workerRegError");err.style.display="none";
+  if(!name){err.textContent="Name is required.";err.style.display="block";return}
+  if(!date){err.textContent="Pay period start date is required.";err.style.display="block";return}
+  if(!user||user.length<2){err.textContent="Username must be 2+ chars.";err.style.display="block";return}
+  if(!pw||pw.length<4){err.textContent="Password must be 4+ chars.";err.style.display="block";return}
+  if(pw!==pwC){err.textContent="Passwords don't match.";err.style.display="block";return}
+  const auth=getAuth();
+  if(!auth||!auth.admin){err.textContent="Admin has not set up this app yet.";err.style.display="block";return}
+  if(auth.admin.username===user){err.textContent="That username is taken. Choose another.";err.style.display="block";return}
+  auth.worker={username:user,passwordHash:simpleHash(pw)};
+  setAuth(auth);
+  state.workerName=name;state.payPeriodStart=date;state.apiKey=auth.apiKey;saveState();
+  setSession({loggedIn:true,user:user,role:"worker",persistent:true});
+  showScreen("mainApp");document.getElementById("headerUser").textContent=user;document.getElementById("adminSettingsSection").style.display="none";render();
 }
 function doLogin(){
   const username=document.getElementById("loginUsername").value.trim().toLowerCase(),pw=document.getElementById("loginPassword").value;
@@ -307,7 +342,7 @@ function doLogin(){
   else sessionStorage.setItem("zrem-session-temp",JSON.stringify({loggedIn:true,user:username,role}));
   state.apiKey=auth.apiKey;showScreen("mainApp");document.getElementById("headerUser").textContent=username;document.getElementById("adminSettingsSection").style.display=isAdmin?"block":"none";render();
 }
-function doLogout(){clearSession();sessionStorage.removeItem("zrem-session-temp");state.apiKey="";showScreen("loginScreen");document.getElementById("loginUsername").value="";document.getElementById("loginPassword").value="";const s=document.getElementById("loginSuccess");s.textContent="Logged out.";s.style.display="block";setTimeout(()=>s.style.display="none",3000)}
+function doLogout(){clearSession();sessionStorage.removeItem("zrem-session-temp");state.apiKey="";showScreen("loginScreen");document.getElementById("loginUsername").value="";document.getElementById("loginPassword").value="";const auth=getAuth();const regLink=document.getElementById("workerRegLink");if(regLink)regLink.style.display=(auth&&!auth.worker)?"block":"none";const s=document.getElementById("loginSuccess");s.textContent="Logged out.";s.style.display="block";setTimeout(()=>s.style.display="none",3000)}
 function updateApiKey(){const k=document.getElementById("settingsApiKey").value.trim();if(!k)return alert("Enter a key.");const a=getAuth();if(a){a.apiKey=k;setAuth(a)}state.apiKey=k;saveState();document.getElementById("settingsApiKey").value="";alert("Key updated.")}
 function updatePassword(){const pw=document.getElementById("settingsNewPassword").value;if(!pw||pw.length<4)return alert("4+ chars.");const a=getAuth();if(a){if(a.admin)a.admin.passwordHash=simpleHash(pw);else a.passwordHash=simpleHash(pw);setAuth(a)}document.getElementById("settingsNewPassword").value="";alert("Admin password updated.")}
 function updateWorkerPassword(){const pw=document.getElementById("settingsWorkerPassword").value;if(!pw||pw.length<4)return alert("4+ chars.");const a=getAuth();if(a&&a.worker){a.worker.passwordHash=simpleHash(pw);setAuth(a)}document.getElementById("settingsWorkerPassword").value="";alert("Worker password updated.")}
@@ -601,7 +636,7 @@ function init(){
   let session=getSession();
   if(!session){try{session=JSON.parse(sessionStorage.getItem("zrem-session-temp"))||null}catch{}}
   if(!auth){document.getElementById("adminPayDate").value=state.payPeriodStart;showScreen("adminSetupScreen")}
-  else if(!session||!session.loggedIn){document.getElementById("loginUsername").value=auth.username||"";showScreen("loginScreen")}
+  else if(!session||!session.loggedIn){document.getElementById("loginUsername").value="";const regLink=document.getElementById("workerRegLink");if(regLink)regLink.style.display=(!auth.worker)?"block":"none";showScreen("loginScreen")}
   else{state.apiKey=auth.apiKey;showScreen("mainApp");document.getElementById("headerUser").textContent=session.user;const isAdmin=session.role==="admin"||session.isAdmin===true;document.getElementById("adminSettingsSection").style.display=isAdmin?"block":"none";render();}
   document.getElementById("chatInput")?.addEventListener("input",updateSendBtn);
   initReminder();
