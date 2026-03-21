@@ -667,6 +667,18 @@ function renderManualForm(){
 }
 function submitManual(){const d=document.getElementById("mfDate").value,h=parseFloat(document.getElementById("mfHours").value),p=document.getElementById("mfProp").value,u=document.getElementById("mfUnit").value.trim(),c=document.getElementById("mfCat").value,desc=document.getElementById("mfDesc").value.trim();if(!h||!p||!desc){alert("Fill all fields.");return}if(c==="Turnover/Make Ready"&&!u){alert("Unit # required for turnover.");return}state.entries.push({date:d,property:p,unit:u,category:c,description:desc,hours:h,id:Date.now()});saveState();render();document.getElementById("manualForm").classList.remove("open")}
 function deleteEntry(idx){if(!confirm("Delete?"))return;state.entries.splice(idx,1);saveState();render()}
+function editEntry(idx){
+  const e=state.entries[idx];if(!e)return;
+  const po=ALL_PROPERTIES.map(p=>`<option value="${p}"${p===e.property?" selected":""}>${getPropDisplay(p)}</option>`).join(""),co=WORK_CATS.map(c=>`<option value="${c}"${c===e.category?" selected":""}>${c}</option>`).join("");
+  const card=document.getElementById("entry-card-"+idx);if(!card)return;
+  card.innerHTML=`<div style="width:100%"><div style="font-size:12px;color:var(--gold);font-weight:600;margin-bottom:8px">EDIT ENTRY</div><div class="manual-grid"><input type="date" id="ef-date-${idx}" class="manual-input" value="${e.date}"><input type="number" id="ef-hours-${idx}" step="0.25" min="0" class="manual-input" value="${e.hours}" placeholder="Hours"><select id="ef-prop-${idx}" class="manual-input"><option value="">Property...</option>${po}</select><input id="ef-unit-${idx}" class="manual-input" placeholder="Unit #" value="${escHtml(e.unit||"")}"><select id="ef-cat-${idx}" class="manual-input">${co}</select></div><textarea id="ef-desc-${idx}" class="manual-input" rows="2" style="width:100%;margin-top:8px;resize:none;font-family:var(--font)">${escHtml(e.description)}</textarea><div style="margin-top:8px;display:flex;gap:8px"><button class="btn-gold" onclick="saveEdit(${idx})">Save</button><button class="btn-dark" onclick="render()">Cancel</button></div></div>`;
+}
+function saveEdit(idx){
+  const d=document.getElementById("ef-date-"+idx).value,h=parseFloat(document.getElementById("ef-hours-"+idx).value),p=document.getElementById("ef-prop-"+idx).value,u=document.getElementById("ef-unit-"+idx).value.trim(),c=document.getElementById("ef-cat-"+idx).value,desc=document.getElementById("ef-desc-"+idx).value.trim();
+  if(!h||!p||!desc){alert("Fill all fields.");return}if(c==="Turnover/Make Ready"&&!u){alert("Unit # required for turnover.");return}
+  state.entries[idx]={...state.entries[idx],date:d,property:p,unit:u,category:c,description:desc,hours:h};
+  saveState();render();
+}
 
 // ═══ TIMESHEET ═══
 function renderTimesheet(){
@@ -681,7 +693,7 @@ function renderTimesheet(){
 // ═══ ENTRIES ═══
 function renderEntries(){
   const sorted=[...state.entries].sort((a,b)=>b.date.localeCompare(a.date));
-  document.getElementById("entriesContent").innerHTML=`<div class="section-title">ALL ENTRIES (${state.entries.length})</div>${sorted.length===0?'<div class="empty-state">No entries yet.</div>':sorted.map(e=>{const idx=state.entries.indexOf(e);return`<div class="entry-card"><div style="flex:1"><div style="font-size:13px;font-weight:600">${escHtml(getPropDisplay(e.property))}${e.unit?` — Unit ${escHtml(e.unit)}`:""}</div><div style="font-size:12px;color:var(--text-dim);margin-top:2px">${fmtDate(e.date)} · ${e.category} · ${e.hours}h · $${(e.hours*HOURLY_RATE).toFixed(2)}</div><div style="font-size:12px;color:#999;margin-top:3px">${escHtml(e.description)}</div></div><button class="entry-del" onclick="deleteEntry(${idx})">Del</button></div>`}).join("")}`;
+  document.getElementById("entriesContent").innerHTML=`<div class="section-title">ALL ENTRIES (${state.entries.length})</div>${sorted.length===0?'<div class="empty-state">No entries yet.</div>':sorted.map(e=>{const idx=state.entries.indexOf(e);return`<div class="entry-card" id="entry-card-${idx}"><div style="flex:1"><div style="font-size:13px;font-weight:600">${escHtml(getPropDisplay(e.property))}${e.unit?` — Unit ${escHtml(e.unit)}`:""}</div><div style="font-size:12px;color:var(--text-dim);margin-top:2px">${fmtDate(e.date)} · ${e.category} · ${e.hours}h · $${(e.hours*HOURLY_RATE).toFixed(2)}</div><div style="font-size:12px;color:#999;margin-top:3px">${escHtml(e.description)}</div></div><button class="entry-del" onclick="editEntry(${idx})" style="margin-right:4px">Edit</button><button class="entry-del" onclick="deleteEntry(${idx})">Del</button></div>`}).join("")}`;
 }
 
 // ═══ REPORTS (with archive button) ═══
@@ -727,12 +739,14 @@ async function submitAndEmail(){
   try{
     const opts={margin:[10,10,10,10],image:{type:"jpeg",quality:.98},html2canvas:{scale:2,useCORS:true,logging:false},jsPDF:{unit:"mm",format:"letter",orientation:"portrait"}};
     statusEl.textContent="📄 Payroll PDF (1/2)...";await new Promise(r=>setTimeout(r,50));
-    const pc=document.createElement("div");pc.innerHTML=`<div style="font-family:'Courier New',monospace;padding:16px;color:#000;font-size:12px;max-width:700px">${buildPayrollHtml()}</div>`;pc.style.cssText="position:fixed;left:-9999px;top:0;width:700px;background:#fff";document.body.appendChild(pc);
-    const pBlob=await html2pdf().set(opts).from(pc).outputPdf("blob");document.body.removeChild(pc);
+    const pc=document.createElement("div");pc.innerHTML=`<div style="font-family:'Courier New',monospace;padding:16px;color:#000;font-size:12px;max-width:700px">${buildPayrollHtml()}</div>`;pc.style.cssText="position:absolute;left:0;top:0;width:700px;background:#fff;z-index:-1;overflow:hidden";document.body.appendChild(pc);
+    await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
+    const pBlob=await html2pdf().set(opts).from(pc).toPdf().output("blob");document.body.removeChild(pc);
     const pFile=new File([pBlob],`ZREM-Payroll-${state.workerName}-${state.payPeriodStart}.pdf`,{type:"application/pdf"});
     statusEl.textContent="📄 Invoice PDF (2/2)...";await new Promise(r=>setTimeout(r,50));
-    const bc=document.createElement("div");bc.innerHTML=`<div style="font-family:'Courier New',monospace;padding:16px;color:#000;font-size:12px;max-width:700px">${buildBillingHtml()}</div>`;bc.style.cssText="position:fixed;left:-9999px;top:0;width:700px;background:#fff";document.body.appendChild(bc);
-    const bBlob=await html2pdf().set(opts).from(bc).outputPdf("blob");document.body.removeChild(bc);
+    const bc=document.createElement("div");bc.innerHTML=`<div style="font-family:'Courier New',monospace;padding:16px;color:#000;font-size:12px;max-width:700px">${buildBillingHtml()}</div>`;bc.style.cssText="position:absolute;left:0;top:0;width:700px;background:#fff;z-index:-1;overflow:hidden";document.body.appendChild(bc);
+    await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
+    const bBlob=await html2pdf().set(opts).from(bc).toPdf().output("blob");document.body.removeChild(bc);
     const bFile=new File([bBlob],`ZREM-Invoice-${state.workerName}-${state.payPeriodStart}.pdf`,{type:"application/pdf"});
     window._pdfs={pFile,bFile,pBlob,bBlob};
     const canShare=navigator.canShare&&navigator.canShare({files:[pFile,bFile]});
