@@ -146,10 +146,14 @@
     <div class="auth-field"><label class="field-label">API Key (Anthropic)</label><input id="adminApiKey" type="password" class="field-input" placeholder="sk-ant-..."><div class="auth-note">Stored in this browser only. Powers the AI chat.</div></div>
     <div class="auth-field"><label class="field-label">Technician Name</label><input id="adminWorkerName" class="field-input" value="Martin"></div>
     <div class="auth-field"><label class="field-label">Pay Period Start Date</label><input id="adminPayDate" type="date" class="field-input"></div>
-    <div class="auth-divider">Login Credentials</div>
-    <div class="auth-field"><label class="field-label">Create Username</label><input id="adminUsername" class="field-input" placeholder="e.g. martin"></div>
-    <div class="auth-field"><label class="field-label">Create Password</label><input id="adminPassword" type="password" class="field-input" placeholder="Choose a password"></div>
-    <div class="auth-field"><label class="field-label">Confirm Password</label><input id="adminPasswordConfirm" type="password" class="field-input" placeholder="Re-enter password"></div>
+    <div class="auth-divider">Admin Account (You)</div>
+    <div class="auth-field"><label class="field-label">Admin Username</label><input id="adminUsername" class="field-input" placeholder="e.g. nick"></div>
+    <div class="auth-field"><label class="field-label">Admin Password</label><input id="adminPassword" type="password" class="field-input" placeholder="Choose a password"></div>
+    <div class="auth-field"><label class="field-label">Confirm Admin Password</label><input id="adminPasswordConfirm" type="password" class="field-input" placeholder="Re-enter password"></div>
+    <div class="auth-divider">Worker Account (Martin)</div>
+    <div class="auth-field"><label class="field-label">Worker Username</label><input id="workerUsername" class="field-input" placeholder="e.g. martin"></div>
+    <div class="auth-field"><label class="field-label">Worker Password</label><input id="workerPassword" type="password" class="field-input" placeholder="Choose a password"></div>
+    <div class="auth-field"><label class="field-label">Confirm Worker Password</label><input id="workerPasswordConfirm" type="password" class="field-input" placeholder="Re-enter password"></div>
     <button class="auth-btn" onclick="completeAdminSetup()">Complete Setup</button>
   </div>
 </div>
@@ -188,7 +192,11 @@
         <div class="settings-title">ADMIN</div>
         <div class="settings-grid">
           <div><label class="field-label">API Key</label><input id="settingsApiKey" type="password" class="field-input" placeholder="sk-ant-..."><button class="btn-dark" style="margin-top:6px" onclick="updateApiKey()">Update Key</button></div>
-          <div><label class="field-label">Change Password</label><input id="settingsNewPassword" type="password" class="field-input" placeholder="New password"><button class="btn-dark" style="margin-top:6px" onclick="updatePassword()">Update Password</button></div>
+          <div><label class="field-label">Change Admin Password</label><input id="settingsNewPassword" type="password" class="field-input" placeholder="New admin password"><button class="btn-dark" style="margin-top:6px" onclick="updatePassword()">Update Admin Password</button></div>
+        </div>
+        <div class="settings-grid" style="margin-top:10px">
+          <div><label class="field-label">Reset Worker Password</label><input id="settingsWorkerPassword" type="password" class="field-input" placeholder="New worker password"><button class="btn-dark" style="margin-top:6px" onclick="updateWorkerPassword()">Update Worker Password</button></div>
+          <div></div>
         </div>
         <div class="settings-grid" style="margin-top:10px">
           <div><label class="field-label">Sheet Sync URL</label><input id="settingsSyncUrl" class="field-input" placeholder="Apps Script deployment URL"><div class="auth-note">Paste the Apps Script web app URL to sync entries to Google Sheets in real-time.</div><button class="btn-dark" style="margin-top:6px" onclick="updateSyncUrl()">Save Sync URL</button></div>
@@ -260,34 +268,49 @@ function getSession(){try{return JSON.parse(localStorage.getItem("zrem-session")
 function setSession(d){localStorage.setItem("zrem-session",JSON.stringify(d))}
 function clearSession(){localStorage.removeItem("zrem-session")}
 function showScreen(id){["adminSetupScreen","loginScreen","mainApp"].forEach(s=>document.getElementById(s).style.display="none");document.getElementById(id).style.display="flex"}
-function showAdminSetup(){const a=getAuth();if(a){const pw=prompt("Enter admin password:");if(!pw||simpleHash(pw)!==a.passwordHash){alert("Incorrect.");return;}}document.getElementById("adminPayDate").value=toISO(new Date());showScreen("adminSetupScreen")}
+function showAdminSetup(){const a=getAuth();if(a){const pw=prompt("Enter admin password:");const hash=simpleHash(pw||"");const valid=a.admin?hash===a.admin.passwordHash:hash===a.passwordHash;if(!pw||!valid){alert("Incorrect.");return;}}document.getElementById("adminPayDate").value=toISO(new Date());showScreen("adminSetupScreen")}
 function completeAdminSetup(){
   const key=document.getElementById("adminApiKey").value.trim(),name=document.getElementById("adminWorkerName").value.trim(),date=document.getElementById("adminPayDate").value;
-  const username=document.getElementById("adminUsername").value.trim().toLowerCase(),pw=document.getElementById("adminPassword").value,pwC=document.getElementById("adminPasswordConfirm").value;
+  const adminUser=document.getElementById("adminUsername").value.trim().toLowerCase(),adminPw=document.getElementById("adminPassword").value,adminPwC=document.getElementById("adminPasswordConfirm").value;
+  const workerUser=document.getElementById("workerUsername").value.trim().toLowerCase(),workerPw=document.getElementById("workerPassword").value,workerPwC=document.getElementById("workerPasswordConfirm").value;
   const err=document.getElementById("adminError");err.style.display="none";
   if(!key){err.textContent="API key required.";err.style.display="block";return}
-  if(!username||username.length<2){err.textContent="Username must be 2+ chars.";err.style.display="block";return}
-  if(!pw||pw.length<4){err.textContent="Password must be 4+ chars.";err.style.display="block";return}
-  if(pw!==pwC){err.textContent="Passwords don't match.";err.style.display="block";return}
-  setAuth({username,passwordHash:simpleHash(pw),apiKey:key});
+  if(!adminUser||adminUser.length<2){err.textContent="Admin username must be 2+ chars.";err.style.display="block";return}
+  if(!adminPw||adminPw.length<4){err.textContent="Admin password must be 4+ chars.";err.style.display="block";return}
+  if(adminPw!==adminPwC){err.textContent="Admin passwords don't match.";err.style.display="block";return}
+  if(!workerUser||workerUser.length<2){err.textContent="Worker username must be 2+ chars.";err.style.display="block";return}
+  if(!workerPw||workerPw.length<4){err.textContent="Worker password must be 4+ chars.";err.style.display="block";return}
+  if(workerPw!==workerPwC){err.textContent="Worker passwords don't match.";err.style.display="block";return}
+  if(adminUser===workerUser){err.textContent="Admin and worker usernames must be different.";err.style.display="block";return}
+  setAuth({admin:{username:adminUser,passwordHash:simpleHash(adminPw)},worker:{username:workerUser,passwordHash:simpleHash(workerPw)},apiKey:key});
   state.workerName=name||"Martin";if(date)state.payPeriodStart=date;state.apiKey=key;saveState();
-  setSession({loggedIn:true,user:username,isAdmin:true,persistent:true});
-  showScreen("mainApp");document.getElementById("headerUser").textContent=username;document.getElementById("adminSettingsSection").style.display="block";render();
+  setSession({loggedIn:true,user:adminUser,role:"admin",persistent:true});
+  showScreen("mainApp");document.getElementById("headerUser").textContent=adminUser;document.getElementById("adminSettingsSection").style.display="block";render();
 }
 function doLogin(){
   const username=document.getElementById("loginUsername").value.trim().toLowerCase(),pw=document.getElementById("loginPassword").value;
   const err=document.getElementById("loginError"),auth=getAuth();err.style.display="none";
   if(!auth){err.textContent="No account. Click Admin: Reconfigure.";err.style.display="block";return}
-  if(username!==auth.username){err.textContent="Invalid username.";err.style.display="block";return}
-  if(simpleHash(pw)!==auth.passwordHash){err.textContent="Wrong password.";err.style.display="block";return}
+  // Support both old single-account format and new multi-account format
+  let role=null;
+  if(auth.admin&&auth.worker){
+    if(username===auth.admin.username&&simpleHash(pw)===auth.admin.passwordHash)role="admin";
+    else if(username===auth.worker.username&&simpleHash(pw)===auth.worker.passwordHash)role="worker";
+  } else if(auth.username){
+    // Legacy single-account format — treat as admin
+    if(username===auth.username&&simpleHash(pw)===auth.passwordHash)role="admin";
+  }
+  if(!role){err.textContent="Invalid username or password.";err.style.display="block";return}
+  const isAdmin=role==="admin";
   const remember=document.getElementById("loginRemember").checked;
-  if(remember)setSession({loggedIn:true,user:username,isAdmin:true,persistent:true});
-  else sessionStorage.setItem("zrem-session-temp",JSON.stringify({loggedIn:true,user:username,isAdmin:true}));
-  state.apiKey=auth.apiKey;showScreen("mainApp");document.getElementById("headerUser").textContent=username;document.getElementById("adminSettingsSection").style.display="block";render();
+  if(remember)setSession({loggedIn:true,user:username,role,persistent:true});
+  else sessionStorage.setItem("zrem-session-temp",JSON.stringify({loggedIn:true,user:username,role}));
+  state.apiKey=auth.apiKey;showScreen("mainApp");document.getElementById("headerUser").textContent=username;document.getElementById("adminSettingsSection").style.display=isAdmin?"block":"none";render();
 }
-function doLogout(){clearSession();sessionStorage.removeItem("zrem-session-temp");state.apiKey="";const a=getAuth();showScreen("loginScreen");document.getElementById("loginUsername").value=a?.username||"";document.getElementById("loginPassword").value="";const s=document.getElementById("loginSuccess");s.textContent="Logged out.";s.style.display="block";setTimeout(()=>s.style.display="none",3000)}
+function doLogout(){clearSession();sessionStorage.removeItem("zrem-session-temp");state.apiKey="";showScreen("loginScreen");document.getElementById("loginUsername").value="";document.getElementById("loginPassword").value="";const s=document.getElementById("loginSuccess");s.textContent="Logged out.";s.style.display="block";setTimeout(()=>s.style.display="none",3000)}
 function updateApiKey(){const k=document.getElementById("settingsApiKey").value.trim();if(!k)return alert("Enter a key.");const a=getAuth();if(a){a.apiKey=k;setAuth(a)}state.apiKey=k;saveState();document.getElementById("settingsApiKey").value="";alert("Key updated.")}
-function updatePassword(){const pw=document.getElementById("settingsNewPassword").value;if(!pw||pw.length<4)return alert("4+ chars.");const a=getAuth();if(a){a.passwordHash=simpleHash(pw);setAuth(a)}document.getElementById("settingsNewPassword").value="";alert("Password updated.")}
+function updatePassword(){const pw=document.getElementById("settingsNewPassword").value;if(!pw||pw.length<4)return alert("4+ chars.");const a=getAuth();if(a){if(a.admin)a.admin.passwordHash=simpleHash(pw);else a.passwordHash=simpleHash(pw);setAuth(a)}document.getElementById("settingsNewPassword").value="";alert("Admin password updated.")}
+function updateWorkerPassword(){const pw=document.getElementById("settingsWorkerPassword").value;if(!pw||pw.length<4)return alert("4+ chars.");const a=getAuth();if(a&&a.worker){a.worker.passwordHash=simpleHash(pw);setAuth(a)}document.getElementById("settingsWorkerPassword").value="";alert("Worker password updated.")}
 function updateSyncUrl(){const u=document.getElementById("settingsSyncUrl").value.trim();state.syncUrl=u;saveState();document.getElementById("settingsSyncUrl").value="";if(u){alert("Sync URL saved. Entries will sync to Google Sheets.");syncToSheet()}else{alert("Sync URL cleared. Sheet sync disabled.");updateSyncIndicator()}}
 function updateBuildiumUrl(){const u=document.getElementById("settingsBuildiumUrl").value.trim();state.buildiumUrl=u;saveState();document.getElementById("settingsBuildiumUrl").value="";alert(u?"Buildium URL saved. Bills will be created when you archive a pay period.":"Buildium URL cleared. Auto-bill disabled.")}
 
@@ -579,7 +602,7 @@ function init(){
   if(!session){try{session=JSON.parse(sessionStorage.getItem("zrem-session-temp"))||null}catch{}}
   if(!auth){document.getElementById("adminPayDate").value=state.payPeriodStart;showScreen("adminSetupScreen")}
   else if(!session||!session.loggedIn){document.getElementById("loginUsername").value=auth.username||"";showScreen("loginScreen")}
-  else{state.apiKey=auth.apiKey;showScreen("mainApp");document.getElementById("headerUser").textContent=session.user;document.getElementById("adminSettingsSection").style.display=session.isAdmin?"block":"none";render();}
+  else{state.apiKey=auth.apiKey;showScreen("mainApp");document.getElementById("headerUser").textContent=session.user;const isAdmin=session.role==="admin"||session.isAdmin===true;document.getElementById("adminSettingsSection").style.display=isAdmin?"block":"none";render();}
   document.getElementById("chatInput")?.addEventListener("input",updateSendBtn);
   initReminder();
   updateSyncIndicator();
