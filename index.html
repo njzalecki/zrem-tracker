@@ -144,13 +144,31 @@
     <div class="auth-subtitle">One-time setup — configure the app and create login credentials.</div>
     <div id="adminError" class="auth-error"></div>
     <div class="auth-field"><label class="field-label">API Key (Anthropic)</label><input id="adminApiKey" type="password" class="field-input" placeholder="sk-ant-..."><div class="auth-note">Stored in this browser only. Powers the AI chat.</div></div>
-    <div class="auth-field"><label class="field-label">Technician Name</label><input id="adminWorkerName" class="field-input" value="Martin"></div>
+    <div class="auth-field"><label class="field-label">Your Name</label><input id="adminWorkerName" class="field-input" placeholder="e.g. Nick"></div>
     <div class="auth-field"><label class="field-label">Pay Period Start Date</label><input id="adminPayDate" type="date" class="field-input"></div>
-    <div class="auth-divider">Login Credentials</div>
-    <div class="auth-field"><label class="field-label">Create Username</label><input id="adminUsername" class="field-input" placeholder="e.g. martin"></div>
-    <div class="auth-field"><label class="field-label">Create Password</label><input id="adminPassword" type="password" class="field-input" placeholder="Choose a password"></div>
-    <div class="auth-field"><label class="field-label">Confirm Password</label><input id="adminPasswordConfirm" type="password" class="field-input" placeholder="Re-enter password"></div>
+    <div class="auth-divider">Admin Account (You)</div>
+    <div class="auth-field"><label class="field-label">Admin Username</label><input id="adminUsername" class="field-input" placeholder="e.g. nick"></div>
+    <div class="auth-field"><label class="field-label">Admin Password</label><input id="adminPassword" type="password" class="field-input" placeholder="Choose a password"></div>
+    <div class="auth-field"><label class="field-label">Confirm Admin Password</label><input id="adminPasswordConfirm" type="password" class="field-input" placeholder="Re-enter password"></div>
     <button class="auth-btn" onclick="completeAdminSetup()">Complete Setup</button>
+    <div class="auth-note" style="text-align:center;margin-top:12px">Worker accounts are created separately — share the app link with your technician so they can register themselves.</div>
+  </div>
+</div>
+
+<!-- WORKER REGISTRATION -->
+<div id="workerRegScreen" class="auth-screen" style="display:none">
+  <div class="auth-card fade-in">
+    <div class="auth-logo"><div><div class="brand">ZREM</div><div class="brand-sub">WORKER REGISTRATION</div></div></div>
+    <div class="auth-subtitle">Create your worker account to start logging hours.</div>
+    <div id="workerRegError" class="auth-error"></div>
+    <div class="auth-field"><label class="field-label">Your Name</label><input id="regWorkerName" class="field-input" placeholder="e.g. Martin"></div>
+    <div class="auth-field"><label class="field-label">Pay Period Start Date</label><input id="regPayDate" type="date" class="field-input"></div>
+    <div class="auth-divider">Login Credentials</div>
+    <div class="auth-field"><label class="field-label">Username</label><input id="regWorkerUsername" class="field-input" placeholder="Choose a username"></div>
+    <div class="auth-field"><label class="field-label">Password</label><input id="regWorkerPassword" type="password" class="field-input" placeholder="Choose a password"></div>
+    <div class="auth-field"><label class="field-label">Confirm Password</label><input id="regWorkerPasswordConfirm" type="password" class="field-input" placeholder="Re-enter password"></div>
+    <button class="auth-btn" onclick="completeWorkerReg()">Create Account</button>
+    <button class="auth-btn-secondary" onclick="showScreen('loginScreen')">Back to Login</button>
   </div>
 </div>
 
@@ -166,6 +184,7 @@
     <div class="auth-field" style="display:flex;align-items:center;gap:8px"><input type="checkbox" id="loginRemember" checked style="accent-color:var(--accent)"><label for="loginRemember" style="font-size:12px;color:var(--text-dim);cursor:pointer">Keep me logged in</label></div>
     <button class="auth-btn" onclick="doLogin()">Sign In</button>
     <div class="auth-note" style="text-align:center;margin-top:12px">With "Keep me logged in" checked, you won't need to sign in again.</div>
+    <button class="auth-btn-secondary" id="workerRegLink" onclick="showWorkerReg()" style="display:none">New technician? Create worker account</button>
     <button class="auth-btn-secondary" onclick="showAdminSetup()">Admin: Reconfigure</button>
   </div>
 </div>
@@ -188,7 +207,11 @@
         <div class="settings-title">ADMIN</div>
         <div class="settings-grid">
           <div><label class="field-label">API Key</label><input id="settingsApiKey" type="password" class="field-input" placeholder="sk-ant-..."><button class="btn-dark" style="margin-top:6px" onclick="updateApiKey()">Update Key</button></div>
-          <div><label class="field-label">Change Password</label><input id="settingsNewPassword" type="password" class="field-input" placeholder="New password"><button class="btn-dark" style="margin-top:6px" onclick="updatePassword()">Update Password</button></div>
+          <div><label class="field-label">Change Admin Password</label><input id="settingsNewPassword" type="password" class="field-input" placeholder="New admin password"><button class="btn-dark" style="margin-top:6px" onclick="updatePassword()">Update Admin Password</button></div>
+        </div>
+        <div class="settings-grid" style="margin-top:10px">
+          <div><label class="field-label">Reset Worker Password</label><input id="settingsWorkerPassword" type="password" class="field-input" placeholder="New worker password"><button class="btn-dark" style="margin-top:6px" onclick="updateWorkerPassword()">Update Worker Password</button></div>
+          <div></div>
         </div>
         <div class="settings-grid" style="margin-top:10px">
           <div><label class="field-label">Sheet Sync URL</label><input id="settingsSyncUrl" class="field-input" placeholder="Apps Script deployment URL"><div class="auth-note">Paste the Apps Script web app URL to sync entries to Google Sheets in real-time.</div><button class="btn-dark" style="margin-top:6px" onclick="updateSyncUrl()">Save Sync URL</button></div>
@@ -259,35 +282,70 @@ function setAuth(d){localStorage.setItem("zrem-auth",JSON.stringify(d))}
 function getSession(){try{return JSON.parse(localStorage.getItem("zrem-session"))||null}catch{return null}}
 function setSession(d){localStorage.setItem("zrem-session",JSON.stringify(d))}
 function clearSession(){localStorage.removeItem("zrem-session")}
-function showScreen(id){["adminSetupScreen","loginScreen","mainApp"].forEach(s=>document.getElementById(s).style.display="none");document.getElementById(id).style.display="flex"}
-function showAdminSetup(){const a=getAuth();if(a){const pw=prompt("Enter admin password:");if(!pw||simpleHash(pw)!==a.passwordHash){alert("Incorrect.");return;}}document.getElementById("adminPayDate").value=toISO(new Date());showScreen("adminSetupScreen")}
+function showScreen(id){["adminSetupScreen","workerRegScreen","loginScreen","mainApp"].forEach(s=>document.getElementById(s).style.display="none");document.getElementById(id).style.display="flex"}
+function showAdminSetup(){const a=getAuth();if(a){const pw=prompt("Enter admin password:");const hash=simpleHash(pw||"");const valid=a.admin?hash===a.admin.passwordHash:hash===a.passwordHash;if(!pw||!valid){alert("Incorrect.");return;}}document.getElementById("adminPayDate").value=toISO(new Date());showScreen("adminSetupScreen")}
 function completeAdminSetup(){
   const key=document.getElementById("adminApiKey").value.trim(),name=document.getElementById("adminWorkerName").value.trim(),date=document.getElementById("adminPayDate").value;
-  const username=document.getElementById("adminUsername").value.trim().toLowerCase(),pw=document.getElementById("adminPassword").value,pwC=document.getElementById("adminPasswordConfirm").value;
+  const adminUser=document.getElementById("adminUsername").value.trim().toLowerCase(),adminPw=document.getElementById("adminPassword").value,adminPwC=document.getElementById("adminPasswordConfirm").value;
   const err=document.getElementById("adminError");err.style.display="none";
   if(!key){err.textContent="API key required.";err.style.display="block";return}
-  if(!username||username.length<2){err.textContent="Username must be 2+ chars.";err.style.display="block";return}
+  if(!adminUser||adminUser.length<2){err.textContent="Admin username must be 2+ chars.";err.style.display="block";return}
+  if(!adminPw||adminPw.length<4){err.textContent="Admin password must be 4+ chars.";err.style.display="block";return}
+  if(adminPw!==adminPwC){err.textContent="Admin passwords don't match.";err.style.display="block";return}
+  const auth=getAuth()||{};
+  auth.admin={username:adminUser,passwordHash:simpleHash(adminPw)};
+  auth.apiKey=key;
+  setAuth(auth);
+  state.workerName=name||"Martin";if(date)state.payPeriodStart=date;state.apiKey=key;saveState();
+  setSession({loggedIn:true,user:adminUser,role:"admin",persistent:true});
+  showScreen("mainApp");document.getElementById("headerUser").textContent=adminUser;document.getElementById("adminSettingsSection").style.display="block";render();
+}
+function showWorkerReg(){document.getElementById("regPayDate").value=toISO(new Date());showScreen("workerRegScreen")}
+function completeWorkerReg(){
+  const name=document.getElementById("regWorkerName").value.trim();
+  const date=document.getElementById("regPayDate").value;
+  const user=document.getElementById("regWorkerUsername").value.trim().toLowerCase();
+  const pw=document.getElementById("regWorkerPassword").value;
+  const pwC=document.getElementById("regWorkerPasswordConfirm").value;
+  const err=document.getElementById("workerRegError");err.style.display="none";
+  if(!name){err.textContent="Name is required.";err.style.display="block";return}
+  if(!date){err.textContent="Pay period start date is required.";err.style.display="block";return}
+  if(!user||user.length<2){err.textContent="Username must be 2+ chars.";err.style.display="block";return}
   if(!pw||pw.length<4){err.textContent="Password must be 4+ chars.";err.style.display="block";return}
   if(pw!==pwC){err.textContent="Passwords don't match.";err.style.display="block";return}
-  setAuth({username,passwordHash:simpleHash(pw),apiKey:key});
-  state.workerName=name||"Martin";if(date)state.payPeriodStart=date;state.apiKey=key;saveState();
-  setSession({loggedIn:true,user:username,isAdmin:true,persistent:true});
-  showScreen("mainApp");document.getElementById("headerUser").textContent=username;document.getElementById("adminSettingsSection").style.display="block";render();
+  const auth=getAuth();
+  if(!auth||!auth.admin){err.textContent="Admin has not set up this app yet.";err.style.display="block";return}
+  if(auth.admin.username===user){err.textContent="That username is taken. Choose another.";err.style.display="block";return}
+  auth.worker={username:user,passwordHash:simpleHash(pw)};
+  setAuth(auth);
+  state.workerName=name;state.payPeriodStart=date;state.apiKey=auth.apiKey;saveState();
+  setSession({loggedIn:true,user:user,role:"worker",persistent:true});
+  showScreen("mainApp");document.getElementById("headerUser").textContent=user;document.getElementById("adminSettingsSection").style.display="none";render();
 }
 function doLogin(){
   const username=document.getElementById("loginUsername").value.trim().toLowerCase(),pw=document.getElementById("loginPassword").value;
   const err=document.getElementById("loginError"),auth=getAuth();err.style.display="none";
   if(!auth){err.textContent="No account. Click Admin: Reconfigure.";err.style.display="block";return}
-  if(username!==auth.username){err.textContent="Invalid username.";err.style.display="block";return}
-  if(simpleHash(pw)!==auth.passwordHash){err.textContent="Wrong password.";err.style.display="block";return}
+  // Support both old single-account format and new multi-account format
+  let role=null;
+  if(auth.admin&&auth.worker){
+    if(username===auth.admin.username&&simpleHash(pw)===auth.admin.passwordHash)role="admin";
+    else if(username===auth.worker.username&&simpleHash(pw)===auth.worker.passwordHash)role="worker";
+  } else if(auth.username){
+    // Legacy single-account format — treat as admin
+    if(username===auth.username&&simpleHash(pw)===auth.passwordHash)role="admin";
+  }
+  if(!role){err.textContent="Invalid username or password.";err.style.display="block";return}
+  const isAdmin=role==="admin";
   const remember=document.getElementById("loginRemember").checked;
-  if(remember)setSession({loggedIn:true,user:username,isAdmin:true,persistent:true});
-  else sessionStorage.setItem("zrem-session-temp",JSON.stringify({loggedIn:true,user:username,isAdmin:true}));
-  state.apiKey=auth.apiKey;showScreen("mainApp");document.getElementById("headerUser").textContent=username;document.getElementById("adminSettingsSection").style.display="block";render();
+  if(remember)setSession({loggedIn:true,user:username,role,persistent:true});
+  else sessionStorage.setItem("zrem-session-temp",JSON.stringify({loggedIn:true,user:username,role}));
+  state.apiKey=auth.apiKey;showScreen("mainApp");document.getElementById("headerUser").textContent=username;document.getElementById("adminSettingsSection").style.display=isAdmin?"block":"none";render();
 }
-function doLogout(){clearSession();sessionStorage.removeItem("zrem-session-temp");state.apiKey="";const a=getAuth();showScreen("loginScreen");document.getElementById("loginUsername").value=a?.username||"";document.getElementById("loginPassword").value="";const s=document.getElementById("loginSuccess");s.textContent="Logged out.";s.style.display="block";setTimeout(()=>s.style.display="none",3000)}
+function doLogout(){clearSession();sessionStorage.removeItem("zrem-session-temp");state.apiKey="";showScreen("loginScreen");document.getElementById("loginUsername").value="";document.getElementById("loginPassword").value="";const auth=getAuth();const regLink=document.getElementById("workerRegLink");if(regLink)regLink.style.display=(auth&&!auth.worker)?"block":"none";const s=document.getElementById("loginSuccess");s.textContent="Logged out.";s.style.display="block";setTimeout(()=>s.style.display="none",3000)}
 function updateApiKey(){const k=document.getElementById("settingsApiKey").value.trim();if(!k)return alert("Enter a key.");const a=getAuth();if(a){a.apiKey=k;setAuth(a)}state.apiKey=k;saveState();document.getElementById("settingsApiKey").value="";alert("Key updated.")}
-function updatePassword(){const pw=document.getElementById("settingsNewPassword").value;if(!pw||pw.length<4)return alert("4+ chars.");const a=getAuth();if(a){a.passwordHash=simpleHash(pw);setAuth(a)}document.getElementById("settingsNewPassword").value="";alert("Password updated.")}
+function updatePassword(){const pw=document.getElementById("settingsNewPassword").value;if(!pw||pw.length<4)return alert("4+ chars.");const a=getAuth();if(a){if(a.admin)a.admin.passwordHash=simpleHash(pw);else a.passwordHash=simpleHash(pw);setAuth(a)}document.getElementById("settingsNewPassword").value="";alert("Admin password updated.")}
+function updateWorkerPassword(){const pw=document.getElementById("settingsWorkerPassword").value;if(!pw||pw.length<4)return alert("4+ chars.");const a=getAuth();if(a&&a.worker){a.worker.passwordHash=simpleHash(pw);setAuth(a)}document.getElementById("settingsWorkerPassword").value="";alert("Worker password updated.")}
 function updateSyncUrl(){const u=document.getElementById("settingsSyncUrl").value.trim();state.syncUrl=u;saveState();document.getElementById("settingsSyncUrl").value="";if(u){alert("Sync URL saved. Entries will sync to Google Sheets.");syncToSheet()}else{alert("Sync URL cleared. Sheet sync disabled.");updateSyncIndicator()}}
 function updateBuildiumUrl(){const u=document.getElementById("settingsBuildiumUrl").value.trim();state.buildiumUrl=u;saveState();document.getElementById("settingsBuildiumUrl").value="";alert(u?"Buildium URL saved. Bills will be created when you archive a pay period.":"Buildium URL cleared. Auto-bill disabled.")}
 
@@ -578,8 +636,8 @@ function init(){
   let session=getSession();
   if(!session){try{session=JSON.parse(sessionStorage.getItem("zrem-session-temp"))||null}catch{}}
   if(!auth){document.getElementById("adminPayDate").value=state.payPeriodStart;showScreen("adminSetupScreen")}
-  else if(!session||!session.loggedIn){document.getElementById("loginUsername").value=auth.username||"";showScreen("loginScreen")}
-  else{state.apiKey=auth.apiKey;showScreen("mainApp");document.getElementById("headerUser").textContent=session.user;document.getElementById("adminSettingsSection").style.display=session.isAdmin?"block":"none";render();}
+  else if(!session||!session.loggedIn){document.getElementById("loginUsername").value="";const regLink=document.getElementById("workerRegLink");if(regLink)regLink.style.display=(!auth.worker)?"block":"none";showScreen("loginScreen")}
+  else{state.apiKey=auth.apiKey;showScreen("mainApp");document.getElementById("headerUser").textContent=session.user;const isAdmin=session.role==="admin"||session.isAdmin===true;document.getElementById("adminSettingsSection").style.display=isAdmin?"block":"none";render();}
   document.getElementById("chatInput")?.addEventListener("input",updateSendBtn);
   initReminder();
   updateSyncIndicator();
@@ -667,6 +725,18 @@ function renderManualForm(){
 }
 function submitManual(){const d=document.getElementById("mfDate").value,h=parseFloat(document.getElementById("mfHours").value),p=document.getElementById("mfProp").value,u=document.getElementById("mfUnit").value.trim(),c=document.getElementById("mfCat").value,desc=document.getElementById("mfDesc").value.trim();if(!h||!p||!desc){alert("Fill all fields.");return}if(c==="Turnover/Make Ready"&&!u){alert("Unit # required for turnover.");return}state.entries.push({date:d,property:p,unit:u,category:c,description:desc,hours:h,id:Date.now()});saveState();render();document.getElementById("manualForm").classList.remove("open")}
 function deleteEntry(idx){if(!confirm("Delete?"))return;state.entries.splice(idx,1);saveState();render()}
+function editEntry(idx){
+  const e=state.entries[idx];if(!e)return;
+  const po=ALL_PROPERTIES.map(p=>`<option value="${p}"${p===e.property?" selected":""}>${getPropDisplay(p)}</option>`).join(""),co=WORK_CATS.map(c=>`<option value="${c}"${c===e.category?" selected":""}>${c}</option>`).join("");
+  const card=document.getElementById("entry-card-"+idx);if(!card)return;
+  card.innerHTML=`<div style="width:100%"><div style="font-size:12px;color:var(--gold);font-weight:600;margin-bottom:8px">EDIT ENTRY</div><div class="manual-grid"><input type="date" id="ef-date-${idx}" class="manual-input" value="${e.date}"><input type="number" id="ef-hours-${idx}" step="0.25" min="0" class="manual-input" value="${e.hours}" placeholder="Hours"><select id="ef-prop-${idx}" class="manual-input"><option value="">Property...</option>${po}</select><input id="ef-unit-${idx}" class="manual-input" placeholder="Unit #" value="${escHtml(e.unit||"")}"><select id="ef-cat-${idx}" class="manual-input">${co}</select></div><textarea id="ef-desc-${idx}" class="manual-input" rows="2" style="width:100%;margin-top:8px;resize:none;font-family:var(--font)">${escHtml(e.description)}</textarea><div style="margin-top:8px;display:flex;gap:8px"><button class="btn-gold" onclick="saveEdit(${idx})">Save</button><button class="btn-dark" onclick="render()">Cancel</button></div></div>`;
+}
+function saveEdit(idx){
+  const d=document.getElementById("ef-date-"+idx).value,h=parseFloat(document.getElementById("ef-hours-"+idx).value),p=document.getElementById("ef-prop-"+idx).value,u=document.getElementById("ef-unit-"+idx).value.trim(),c=document.getElementById("ef-cat-"+idx).value,desc=document.getElementById("ef-desc-"+idx).value.trim();
+  if(!h||!p||!desc){alert("Fill all fields.");return}if(c==="Turnover/Make Ready"&&!u){alert("Unit # required for turnover.");return}
+  state.entries[idx]={...state.entries[idx],date:d,property:p,unit:u,category:c,description:desc,hours:h};
+  saveState();render();
+}
 
 // ═══ TIMESHEET ═══
 function renderTimesheet(){
@@ -681,7 +751,7 @@ function renderTimesheet(){
 // ═══ ENTRIES ═══
 function renderEntries(){
   const sorted=[...state.entries].sort((a,b)=>b.date.localeCompare(a.date));
-  document.getElementById("entriesContent").innerHTML=`<div class="section-title">ALL ENTRIES (${state.entries.length})</div>${sorted.length===0?'<div class="empty-state">No entries yet.</div>':sorted.map(e=>{const idx=state.entries.indexOf(e);return`<div class="entry-card"><div style="flex:1"><div style="font-size:13px;font-weight:600">${escHtml(getPropDisplay(e.property))}${e.unit?` — Unit ${escHtml(e.unit)}`:""}</div><div style="font-size:12px;color:var(--text-dim);margin-top:2px">${fmtDate(e.date)} · ${e.category} · ${e.hours}h · $${(e.hours*HOURLY_RATE).toFixed(2)}</div><div style="font-size:12px;color:#999;margin-top:3px">${escHtml(e.description)}</div></div><button class="entry-del" onclick="deleteEntry(${idx})">Del</button></div>`}).join("")}`;
+  document.getElementById("entriesContent").innerHTML=`<div class="section-title">ALL ENTRIES (${state.entries.length})</div>${sorted.length===0?'<div class="empty-state">No entries yet.</div>':sorted.map(e=>{const idx=state.entries.indexOf(e);return`<div class="entry-card" id="entry-card-${idx}"><div style="flex:1"><div style="font-size:13px;font-weight:600">${escHtml(getPropDisplay(e.property))}${e.unit?` — Unit ${escHtml(e.unit)}`:""}</div><div style="font-size:12px;color:var(--text-dim);margin-top:2px">${fmtDate(e.date)} · ${e.category} · ${e.hours}h · $${(e.hours*HOURLY_RATE).toFixed(2)}</div><div style="font-size:12px;color:#999;margin-top:3px">${escHtml(e.description)}</div></div><button class="entry-del" onclick="editEntry(${idx})" style="margin-right:4px">Edit</button><button class="entry-del" onclick="deleteEntry(${idx})">Del</button></div>`}).join("")}`;
 }
 
 // ═══ REPORTS (with archive button) ═══
@@ -727,12 +797,14 @@ async function submitAndEmail(){
   try{
     const opts={margin:[10,10,10,10],image:{type:"jpeg",quality:.98},html2canvas:{scale:2,useCORS:true,logging:false},jsPDF:{unit:"mm",format:"letter",orientation:"portrait"}};
     statusEl.textContent="📄 Payroll PDF (1/2)...";await new Promise(r=>setTimeout(r,50));
-    const pc=document.createElement("div");pc.innerHTML=`<div style="font-family:'Courier New',monospace;padding:16px;color:#000;font-size:12px;max-width:700px">${buildPayrollHtml()}</div>`;pc.style.cssText="position:fixed;left:-9999px;top:0;width:700px;background:#fff";document.body.appendChild(pc);
-    const pBlob=await html2pdf().set(opts).from(pc).outputPdf("blob");document.body.removeChild(pc);
+    const pc=document.createElement("div");pc.innerHTML=`<div style="font-family:'Courier New',monospace;padding:16px;color:#000;font-size:12px;max-width:700px">${buildPayrollHtml()}</div>`;pc.style.cssText="position:absolute;left:0;top:0;width:700px;background:#fff;z-index:-1;overflow:hidden";document.body.appendChild(pc);
+    await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
+    const pBlob=await html2pdf().set(opts).from(pc).toPdf().output("blob");document.body.removeChild(pc);
     const pFile=new File([pBlob],`ZREM-Payroll-${state.workerName}-${state.payPeriodStart}.pdf`,{type:"application/pdf"});
     statusEl.textContent="📄 Invoice PDF (2/2)...";await new Promise(r=>setTimeout(r,50));
-    const bc=document.createElement("div");bc.innerHTML=`<div style="font-family:'Courier New',monospace;padding:16px;color:#000;font-size:12px;max-width:700px">${buildBillingHtml()}</div>`;bc.style.cssText="position:fixed;left:-9999px;top:0;width:700px;background:#fff";document.body.appendChild(bc);
-    const bBlob=await html2pdf().set(opts).from(bc).outputPdf("blob");document.body.removeChild(bc);
+    const bc=document.createElement("div");bc.innerHTML=`<div style="font-family:'Courier New',monospace;padding:16px;color:#000;font-size:12px;max-width:700px">${buildBillingHtml()}</div>`;bc.style.cssText="position:absolute;left:0;top:0;width:700px;background:#fff;z-index:-1;overflow:hidden";document.body.appendChild(bc);
+    await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
+    const bBlob=await html2pdf().set(opts).from(bc).toPdf().output("blob");document.body.removeChild(bc);
     const bFile=new File([bBlob],`ZREM-Invoice-${state.workerName}-${state.payPeriodStart}.pdf`,{type:"application/pdf"});
     window._pdfs={pFile,bFile,pBlob,bBlob};
     const canShare=navigator.canShare&&navigator.canShare({files:[pFile,bFile]});
