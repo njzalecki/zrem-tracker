@@ -804,16 +804,18 @@ async function submitAndEmail(){
   btnEl.disabled=true;btnEl.style.background="#444";btnEl.style.color="#777";btnEl.textContent="Generating...";
   await new Promise(r=>setTimeout(r,100));
   try{
-    const opts={margin:[10,10,10,10],image:{type:"jpeg",quality:.98},html2canvas:{scale:2,useCORS:true,logging:false},jsPDF:{unit:"mm",format:"letter",orientation:"portrait"}};
+    document.body.style.overflow="visible";
+    const opts={margin:[10,10,10,10],image:{type:"jpeg",quality:.98},html2canvas:{scale:2,useCORS:true,logging:false,scrollY:0,windowHeight:2000},jsPDF:{unit:"mm",format:"letter",orientation:"portrait"}};
     statusEl.textContent="📄 Payroll PDF (1/2)...";await new Promise(r=>setTimeout(r,50));
-    const pc=document.createElement("div");pc.innerHTML=`<div style="font-family:'Courier New',monospace;padding:16px;color:#000;font-size:12px;max-width:700px">${buildPayrollHtml()}</div>`;pc.style.cssText="position:fixed;left:0;top:0;width:700px;background:#fff;z-index:99999;opacity:0;pointer-events:none";document.body.appendChild(pc);
+    const pc=document.createElement("div");pc.innerHTML=`<div style="font-family:'Courier New',monospace;padding:16px;color:#000;font-size:12px;max-width:700px">${buildPayrollHtml()}</div>`;pc.style.cssText="position:absolute;left:0;top:0;width:700px;background:#fff;z-index:-1";document.body.appendChild(pc);
     await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
     const pBlob=await html2pdf().set(opts).from(pc).toPdf().output("blob");document.body.removeChild(pc);
     const pFile=new File([pBlob],`ZREM-Payroll-${state.workerName}-${state.payPeriodStart}.pdf`,{type:"application/pdf"});
     statusEl.textContent="📄 Invoice PDF (2/2)...";await new Promise(r=>setTimeout(r,50));
-    const bc=document.createElement("div");bc.innerHTML=`<div style="font-family:'Courier New',monospace;padding:16px;color:#000;font-size:12px;max-width:700px">${buildBillingHtml()}</div>`;bc.style.cssText="position:fixed;left:0;top:0;width:700px;background:#fff;z-index:99999;opacity:0;pointer-events:none";document.body.appendChild(bc);
+    const bc=document.createElement("div");bc.innerHTML=`<div style="font-family:'Courier New',monospace;padding:16px;color:#000;font-size:12px;max-width:700px">${buildBillingHtml()}</div>`;bc.style.cssText="position:absolute;left:0;top:0;width:700px;background:#fff;z-index:-1";document.body.appendChild(bc);
     await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
     const bBlob=await html2pdf().set(opts).from(bc).toPdf().output("blob");document.body.removeChild(bc);
+    document.body.style.overflow="hidden";
     const bFile=new File([bBlob],`ZREM-Invoice-${state.workerName}-${state.payPeriodStart}.pdf`,{type:"application/pdf"});
     window._pdfs={pFile,bFile,pBlob,bBlob};
     const canShare=navigator.canShare&&navigator.canShare({files:[pFile,bFile]});
@@ -825,7 +827,7 @@ async function submitAndEmail(){
     const pUrl=URL.createObjectURL(pBlob),bUrl=URL.createObjectURL(bBlob);
     let ex=document.getElementById("submitActions");if(ex)ex.remove();
     statusEl.insertAdjacentHTML("afterend",`<div id="submitActions" style="display:flex;flex-direction:column;gap:8px;margin-top:12px">${canShare?`<button onclick="navigator.share({title:'ZREM',files:[window._pdfs.pFile,window._pdfs.bFile]}).catch(()=>{})" style="width:100%;padding:12px;background:var(--gold);color:#111;border:none;cursor:pointer;font-size:13px;font-weight:600;border-radius:6px;font-family:var(--font)">📤 Share Again</button>`:""}<a href="mailto:nick@zebrarentals.com?subject=${subj}&body=${body}" style="display:block;padding:12px;background:var(--gold);color:#111;border:none;font-size:13px;font-weight:600;border-radius:6px;font-family:var(--font);text-align:center;text-decoration:none">✉️ Open Email to Nick</a><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><a href="${pUrl}" download="ZREM-Payroll.pdf" style="display:block;padding:12px;background:var(--surface2);color:var(--text);border:1px solid var(--border2);font-size:12px;font-weight:600;border-radius:6px;font-family:var(--font);text-align:center;text-decoration:none">📥 Payroll PDF</a><a href="${bUrl}" download="ZREM-Invoice.pdf" style="display:block;padding:12px;background:var(--surface2);color:var(--text);border:1px solid var(--border2);font-size:12px;font-weight:600;border-radius:6px;font-family:var(--font);text-align:center;text-decoration:none">📥 Invoice PDF</a></div></div>`);
-  }catch(err){console.error(err);statusEl.style.background="#3a1a1a";statusEl.style.border="1px solid #5a2a2a";statusEl.style.color="#e88";statusEl.innerHTML=`❌ ${err.message}`}
+  }catch(err){document.body.style.overflow="hidden";console.error(err);statusEl.style.background="#3a1a1a";statusEl.style.border="1px solid #5a2a2a";statusEl.style.color="#e88";statusEl.innerHTML=`❌ ${err.message}`}
   btnEl.disabled=false;btnEl.style.background="var(--gold)";btnEl.style.color="#111";btnEl.textContent="📨 Submit & Email PDFs to Nick";
 }
 
