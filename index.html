@@ -925,7 +925,6 @@ async function submitAndEmail(){
     statusEl.textContent="📄 Invoice PDF (2/2)...";await new Promise(r=>setTimeout(r,50));
     const bBlob=buildInvoicePdf();
     const bFile=new File([bBlob],`ZREM-Invoice-${state.workerName}-${state.payPeriodStart}.pdf`,{type:"application/pdf"});
-    const bFile=new File([bBlob],`ZREM-Invoice-${state.workerName}-${state.payPeriodStart}.pdf`,{type:"application/pdf"});
     window._pdfs={pFile,bFile,pBlob,bBlob};
     const canShare=navigator.canShare&&navigator.canShare({files:[pFile,bFile]});
     if(canShare){
