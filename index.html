@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>ZREM — Maintenance Tracker</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.2/html2pdf.bundle.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
   :root {
@@ -804,39 +804,126 @@ async function submitAndEmail(){
   btnEl.disabled=true;btnEl.style.background="#444";btnEl.style.color="#777";btnEl.textContent="Generating...";
   await new Promise(r=>setTimeout(r,100));
   try{
-    const opts={margin:[10,10,10,10],image:{type:"jpeg",quality:.98},html2canvas:{scale:2,useCORS:true,logging:false},jsPDF:{unit:"mm",format:"letter",orientation:"portrait"}};
-    async function renderPdf(html){
-      return new Promise((resolve,reject)=>{
-        const iframe=document.createElement("iframe");
-        iframe.style.cssText="position:fixed;left:0;top:0;width:700px;height:900px;border:none;z-index:-1;visibility:hidden";
-        document.body.appendChild(iframe);
-        const doc=iframe.contentDocument;
-        doc.open();
-        doc.write(`<html><body style="margin:0;padding:16px;font-family:'Courier New',monospace;font-size:12px;color:#000;background:#fff;width:700px">${html}</body></html>`);
-        doc.close();
-        iframe.onload=async()=>{
-          try{
-            await new Promise(r=>setTimeout(r,200));
-            const blob=await html2pdf().set(opts).from(doc.body).toPdf().output("blob");
-            document.body.removeChild(iframe);
-            resolve(blob);
-          }catch(e){document.body.removeChild(iframe);reject(e)}
-        };
-        setTimeout(async()=>{
-          try{
-            await new Promise(r=>setTimeout(r,200));
-            const blob=await html2pdf().set(opts).from(doc.body).toPdf().output("blob");
-            document.body.removeChild(iframe);
-            resolve(blob);
-          }catch(e){document.body.removeChild(iframe);reject(e)}
-        },500);
+    function buildPayrollPdf(){
+      const{jsPDF}=window.jspdf;
+      const doc=new jsPDF({unit:"mm",format:"letter"});
+      const W=doc.internal.pageSize.getWidth(),margin=15;
+      let y=20;
+      function addLine(txt,size,style,align){
+        doc.setFontSize(size);doc.setFont("courier",style||"normal");
+        const x=align==="center"?W/2:align==="right"?W-margin:margin;
+        doc.text(txt,x,y,{align:align||"left"});y+=size*0.5;
+      }
+      function hLine(){doc.setLineWidth(0.5);doc.line(margin,y,W-margin,y);y+=3;}
+      addLine("ZALECKI REAL ESTATE MAINTENANCE",14,"bold","center");y+=1;
+      addLine("322 Lamar Ave Suite #201 · Charlotte, NC 28204",8,"normal","center");y+=4;
+      addLine("PAYROLL SUMMARY",12,"bold","center");y+=2;
+      hLine();
+      const pd=getPayDates(state.payPeriodStart);
+      addLine(`Employee: ${state.workerName}    Rate: $${HOURLY_RATE}/hr`,10,"normal");
+      addLine(`Pay Period: ${fmtDate(pd[0])} - ${fmtDate(pd[13])}`,10,"normal");y+=3;
+      // Table header
+      doc.setFontSize(9);doc.setFont("courier","bold");
+      doc.text("Date",margin,y);doc.text("Hours",margin+70,y,{align:"right"});doc.text("Locations",margin+75,y);y+=1;
+      hLine();
+      doc.setFont("courier","normal");doc.setFontSize(9);
+      pd.forEach((d,i)=>{
+        if(y>250){doc.addPage();y=20;}
+        const dh=state.entries.filter(e=>e.date===d).reduce((s,e)=>s+e.hours,0);
+        const locs=[...new Set(state.entries.filter(e=>e.date===d).map(e=>getPropDisplay(e.property)))].join(", ")||"—";
+        doc.text(fmtDate(d),margin,y);
+        doc.text(dh>0?dh.toFixed(2):"—",margin+70,y,{align:"right"});
+        doc.text(locs.slice(0,50),margin+75,y);
+        y+=4.5;
+        if(i===6){doc.setLineWidth(0.3);doc.line(margin,y-2,W-margin,y-2);}
       });
+      y+=2;hLine();
+      const w1h=weekHours(state.entries,pd.slice(0,7)),w2h=weekHours(state.entries,pd.slice(7,14));
+      const tr=Math.min(w1h,REG_HOURS)+Math.min(w2h,REG_HOURS),to=Math.max(0,w1h-REG_HOURS)+Math.max(0,w2h-REG_HOURS),tt=tr+to;
+      doc.setFontSize(10);
+      doc.text("Week 1",margin,y);doc.text(w1h.toFixed(2),margin+70,y,{align:"right"});y+=5;
+      doc.text("Week 2",margin,y);doc.text(w2h.toFixed(2),margin+70,y,{align:"right"});y+=2;
+      doc.setLineWidth(0.2);doc.line(margin,y,margin+75,y);y+=4;
+      doc.setFont("courier","bold");
+      doc.text("Regular",margin,y);doc.text(tr.toFixed(2),margin+70,y,{align:"right"});y+=5;
+      doc.text("Overtime",margin,y);doc.text(to.toFixed(2),margin+70,y,{align:"right"});y+=2;
+      doc.setLineWidth(0.5);doc.line(margin,y,margin+75,y);y+=5;
+      doc.setFontSize(12);
+      doc.text("TOTAL",margin,y);doc.text(`${tt.toFixed(2)} hrs / $${(tt*HOURLY_RATE).toFixed(2)}`,margin+140,y,{align:"right"});
+      return doc.output("blob");
+    }
+    function buildInvoicePdf(){
+      const{jsPDF}=window.jspdf;
+      const doc=new jsPDF({unit:"mm",format:"letter"});
+      const W=doc.internal.pageSize.getWidth(),margin=15;
+      let y=20;
+      const pd=getPayDates(state.payPeriodStart);
+      const invoiceNum="ZREM-"+state.payPeriodStart.replace(/-/g,"").slice(2);
+      // Header
+      doc.setFontSize(14);doc.setFont("courier","bold");
+      doc.text("ZALECKI REAL ESTATE MAINTENANCE",margin,y);
+      doc.text("INVOICE",W-margin,y,{align:"right"});y+=5;
+      doc.setFontSize(8);doc.setFont("courier","normal");
+      doc.text("322 Lamar Ave Suite #201, Charlotte, NC 28204",margin,y);
+      doc.text(`No: ${invoiceNum}`,W-margin,y,{align:"right"});y+=4;
+      doc.setLineWidth(0.5);doc.line(margin,y,W-margin,y);y+=5;
+      doc.setFontSize(10);
+      doc.text(`Tech: ${state.workerName}   Period: ${fmtDate(pd[0])} - ${fmtDate(pd[13])}   Rate: $${HOURLY_RATE}/hr`,margin,y);y+=7;
+      // Group by entity/property
+      const byEntity={};state.entries.forEach(e=>{const ent=getEntity(e.property);if(!byEntity[ent])byEntity[ent]={};if(!byEntity[ent][e.property])byEntity[ent][e.property]=[];byEntity[ent][e.property].push(e)});
+      let grandHours=0,grandTotal=0;
+      for(const[entity,props]of Object.entries(byEntity).sort()){
+        if(y>240){doc.addPage();y=20;}
+        doc.setFillColor(230,230,230);doc.rect(margin,y-4,W-margin*2,7,"F");
+        doc.setFontSize(10);doc.setFont("courier","bold");
+        doc.text(`BILL TO: ${entity}`,margin+2,y);y+=7;
+        let eH=0,eT=0;
+        for(const[prop,entries]of Object.entries(props).sort()){
+          if(y>245){doc.addPage();y=20;}
+          doc.setFont("courier","bold");doc.setFontSize(9);
+          doc.text(getPropDisplay(prop),margin,y);y+=1;
+          doc.setLineWidth(0.3);doc.line(margin,y,W-margin,y);y+=4;
+          // Column headers
+          doc.setFontSize(8);doc.setFont("courier","normal");
+          doc.text("Date",margin,y);doc.text("Unit",margin+30,y);doc.text("Task",margin+50,y);
+          doc.text("Hours",margin+130,y,{align:"right"});doc.text("Charge",W-margin,y,{align:"right"});y+=4;
+          const sorted=[...entries].sort((a,b)=>a.date.localeCompare(b.date));
+          let pH=0;
+          sorted.forEach(e=>{
+            if(y>255){doc.addPage();y=20;}
+            doc.setFontSize(8);doc.setFont("courier","normal");
+            doc.text(fmtDateShort(e.date),margin,y);
+            doc.text(e.unit||"—",margin+30,y);
+            doc.text((e.description||"").slice(0,40),margin+50,y);
+            doc.text(e.hours.toFixed(2),margin+130,y,{align:"right"});
+            doc.text("$"+(e.hours*HOURLY_RATE).toFixed(2),W-margin,y,{align:"right"});
+            pH+=e.hours;y+=4;
+          });
+          const pT=pH*HOURLY_RATE;eH+=pH;eT+=pT;
+          doc.setLineWidth(0.3);doc.line(margin,y-1,W-margin,y-1);y+=2;
+          doc.setFont("courier","bold");doc.setFontSize(9);
+          doc.text("Subtotal",margin,y);doc.text(pH.toFixed(2),margin+130,y,{align:"right"});
+          doc.text("$"+pT.toFixed(2),W-margin,y,{align:"right"});y+=6;
+        }
+        grandHours+=eH;grandTotal+=eT;
+        doc.setFont("courier","bold");doc.setFontSize(9);
+        doc.text(`Entity Total: ${eH.toFixed(2)} hrs - $${eT.toFixed(2)}`,W-margin,y,{align:"right"});y+=8;
+      }
+      // Grand total
+      if(y>250){doc.addPage();y=20;}
+      doc.setLineWidth(0.8);doc.line(margin,y,W-margin,y);y+=6;
+      doc.setFontSize(13);doc.setFont("courier","bold");
+      doc.text("GRAND TOTAL",margin,y);
+      doc.text(`${grandHours.toFixed(2)} hrs    $${grandTotal.toFixed(2)}`,W-margin,y,{align:"right"});
+      y+=10;doc.setFontSize(7);doc.setFont("courier","normal");
+      doc.text("ZREM · 322 Lamar Ave Suite #201 · Charlotte, NC 28204",W/2,y,{align:"center"});
+      return doc.output("blob");
     }
     statusEl.textContent="📄 Payroll PDF (1/2)...";await new Promise(r=>setTimeout(r,50));
-    const pBlob=await renderPdf(buildPayrollHtml());
+    const pBlob=buildPayrollPdf();
     const pFile=new File([pBlob],`ZREM-Payroll-${state.workerName}-${state.payPeriodStart}.pdf`,{type:"application/pdf"});
     statusEl.textContent="📄 Invoice PDF (2/2)...";await new Promise(r=>setTimeout(r,50));
-    const bBlob=await renderPdf(buildBillingHtml());
+    const bBlob=buildInvoicePdf();
     const bFile=new File([bBlob],`ZREM-Invoice-${state.workerName}-${state.payPeriodStart}.pdf`,{type:"application/pdf"});
     const bFile=new File([bBlob],`ZREM-Invoice-${state.workerName}-${state.payPeriodStart}.pdf`,{type:"application/pdf"});
     window._pdfs={pFile,bFile,pBlob,bBlob};
