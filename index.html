@@ -671,11 +671,19 @@ EXISTING ENTRIES: {{EXISTING}}
 RULES: today=today's date. yesterday=calculate. Day names=calc relative. Dates like "March 3rd"=current year. Missing hours=ask. Multiple jobs=multiple entries. Be concise.
 
 CRITICAL: Respond with ONLY raw JSON. No markdown/backticks.
-Keys: "message"(string), "entries"(array), "action"("add"|"list"|"delete"|"chat"), "deleteIndex"(number|null)
+Keys: "message"(string), "entries"(array), "action"("add"|"list"|"delete"|"update"|"chat"), "deleteIndex"(number|null), "updateIndex"(number|null), "updateFields"(object|null)
 Entry: "date","property","unit","category","description","hours"
 
-EXAMPLE: {"message":"Logged 2.5h plumbing at 322 Lamar Unit 4.","entries":[{"date":"2026-03-07","property":"322 Lamar Ave","unit":"4","category":"Plumbing","description":"Fixed leaky faucet","hours":2.5}],"action":"add","deleteIndex":null}
-EXAMPLE clarification: {"message":"Which unit?","entries":[],"action":"chat","deleteIndex":null}`;
+ACTIONS:
+- "add": Add new entries from the "entries" array
+- "delete": Remove entry at "deleteIndex"
+- "update": Modify entry at "updateIndex" with fields in "updateFields" (only include changed fields, e.g. {"hours":3} or {"description":"Fixed sink","hours":2})
+- "list": Show current entries
+- "chat": Conversation only
+
+EXAMPLE add: {"message":"Logged 2.5h plumbing at 322 Lamar Unit 4.","entries":[{"date":"2026-03-07","property":"322 Lamar Ave","unit":"4","category":"Plumbing","description":"Fixed leaky faucet","hours":2.5}],"action":"add","deleteIndex":null,"updateIndex":null,"updateFields":null}
+EXAMPLE update: {"message":"Updated entry 2 to 3 hours.","entries":[],"action":"update","deleteIndex":null,"updateIndex":2,"updateFields":{"hours":3}}
+EXAMPLE clarification: {"message":"Which unit?","entries":[],"action":"chat","deleteIndex":null,"updateIndex":null,"updateFields":null}`;
 
 // ═══ CHAT ═══
 async function sendChat(){
@@ -700,6 +708,7 @@ async function sendChat(){
     parsed.entries=parsed.entries||[];parsed.action=parsed.action||(parsed.entries.length>0?"add":"chat");parsed.message=parsed.message||"Got it!";
     if(parsed.action==="add"&&parsed.entries.length){parsed.entries.forEach(e=>{state.entries.push({date:e.date||toISO(new Date()),property:e.property||"Unknown",unit:e.unit||"",category:e.category||"General Maintenance",description:e.description||"",hours:parseFloat(e.hours)||0,id:Date.now()+Math.random()})})}
     if(parsed.action==="delete"&&parsed.deleteIndex!=null)state.entries.splice(parsed.deleteIndex,1);
+    if(parsed.action==="update"&&parsed.updateIndex!=null&&parsed.updateFields&&state.entries[parsed.updateIndex]){Object.assign(state.entries[parsed.updateIndex],parsed.updateFields)}
     let text=parsed.message;
     if(parsed.action==="list"&&state.entries.length){text+="\n\n"+state.entries.map((e,i)=>`${i+1}. ${fmtDate(e.date)} — ${e.property}${e.unit?" Unit "+e.unit:""} — ${e.category}\n   ${e.description} (${e.hours}h)`).join("\n\n")}
     state.chatHistory.push({role:"assistant",text,time:timeStr(),entriesAdded:parsed.entries?.length||0,action:parsed.action});
