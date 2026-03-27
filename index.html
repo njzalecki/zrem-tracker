@@ -622,25 +622,26 @@ function renderDashboard(){
 }
 
 // ═══ INIT ═══
-function applyUrlParams(){
-  const params=new URLSearchParams(window.location.search);
-  if(!params.toString())return;
-  let changed=false;
-  if(params.get('buildiumUrl')){state.buildiumUrl=params.get('buildiumUrl');changed=true;}
-  if(params.get('syncUrl')){state.syncUrl=params.get('syncUrl');changed=true;}
-  if(params.get('workerName')){state.workerName=params.get('workerName');changed=true;}
-  if(params.get('payPeriodStart')){state.payPeriodStart=params.get('payPeriodStart');changed=true;}
-  const apiKey=params.get('apiKey'),adminUser=params.get('adminUser'),adminPass=params.get('adminPass'),workerUser=params.get('workerUser'),workerPass=params.get('workerPass');
-  if(apiKey&&adminUser&&adminPass&&!getAuth()){
-    const auth={admin:{username:adminUser.toLowerCase(),passwordHash:simpleHash(adminPass)},apiKey:apiKey};
-    if(workerUser&&workerPass){auth.worker={username:workerUser.toLowerCase(),passwordHash:simpleHash(workerPass)};}
-    setAuth(auth);state.apiKey=apiKey;changed=true;
-  }
-  if(changed){saveState();window.history.replaceState({},'',window.location.pathname);}
+const CONFIG_URL="https://script.google.com/macros/s/AKfycbw8LpqIF1w1f0vlJn-PDTrhMwKecOH7RSALfOvJeANzRDwUmt-IxhkKGX_9ygLGPFM/exec?page=zrem-config";
+async function fetchServerConfig(){
+  if(getAuth())return;
+  try{
+    const resp=await fetch(CONFIG_URL);
+    const cfg=await resp.json();
+    if(cfg&&cfg.apiKey&&cfg.admin){
+      const auth={admin:cfg.admin,apiKey:cfg.apiKey};
+      if(cfg.worker)auth.worker=cfg.worker;
+      setAuth(auth);
+      state.apiKey=cfg.apiKey;
+      if(cfg.workerName)state.workerName=cfg.workerName;
+      if(cfg.buildiumUrl)state.buildiumUrl=cfg.buildiumUrl;
+      saveState();
+    }
+  }catch(e){console.warn("Server config fetch failed:",e);}
 }
-function init(){
+async function init(){
   loadState();
-  applyUrlParams();
+  await fetchServerConfig();
   const auth=getAuth();
   let session=getSession();
   if(!session){try{session=JSON.parse(sessionStorage.getItem("zrem-session-temp"))||null}catch{}}
