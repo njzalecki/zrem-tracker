@@ -634,7 +634,7 @@ async function fetchServerConfig(){
       setAuth(auth);
       state.apiKey=cfg.apiKey;
       if(cfg.workerName)state.workerName=cfg.workerName;
-      if(cfg.buildiumUrl)state.buildiumUrl=cfg.buildiumUrl;
+      if(cfg.buildiumUrl){state.buildiumUrl=cfg.buildiumUrl;if(!state.syncUrl)state.syncUrl=cfg.buildiumUrl;}
       saveState();
     }
   }catch(e){console.warn("Server config fetch failed:",e);}
