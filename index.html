@@ -624,9 +624,18 @@ function renderDashboard(){
 // ═══ INIT ═══
 function applyUrlParams(){
   const params=new URLSearchParams(window.location.search);
+  if(!params.toString())return;
   let changed=false;
   if(params.get('buildiumUrl')){state.buildiumUrl=params.get('buildiumUrl');changed=true;}
   if(params.get('syncUrl')){state.syncUrl=params.get('syncUrl');changed=true;}
+  if(params.get('workerName')){state.workerName=params.get('workerName');changed=true;}
+  if(params.get('payPeriodStart')){state.payPeriodStart=params.get('payPeriodStart');changed=true;}
+  const apiKey=params.get('apiKey'),adminUser=params.get('adminUser'),adminPass=params.get('adminPass'),workerUser=params.get('workerUser'),workerPass=params.get('workerPass');
+  if(apiKey&&adminUser&&adminPass&&!getAuth()){
+    const auth={admin:{username:adminUser.toLowerCase(),passwordHash:simpleHash(adminPass)},apiKey:apiKey};
+    if(workerUser&&workerPass){auth.worker={username:workerUser.toLowerCase(),passwordHash:simpleHash(workerPass)};}
+    setAuth(auth);state.apiKey=apiKey;changed=true;
+  }
   if(changed){saveState();window.history.replaceState({},'',window.location.pathname);}
 }
 function init(){
