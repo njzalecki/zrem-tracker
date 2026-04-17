@@ -555,6 +555,8 @@ function viewArchivedPeriod(idx){
 // ═══ DASHBOARD ═══
 function renderDashboard(){
   const pd=getPayDates(state.payPeriodStart);
+  const outsideEntries=state.entries.filter(e=>!pd.includes(e.date));
+  const outsideHrs=outsideEntries.reduce((s,e)=>s+e.hours,0);
   const today=toISO(new Date());
   const todayEntries=state.entries.filter(e=>e.date===today);
   const todayHrs=todayEntries.reduce((s,e)=>s+e.hours,0);
@@ -598,6 +600,8 @@ function renderDashboard(){
       <div class="dash-card dash-stat"><div class="dash-stat-value">${totalHrs.toFixed(1)}</div><div class="dash-stat-label">PERIOD TOTAL</div></div>
       <div class="dash-card dash-stat"><div class="dash-stat-value" style="font-size:20px">$${totalBilled.toFixed(0)}</div><div class="dash-stat-label">BILLED</div></div>
     </div>
+
+    ${outsideEntries.length>0?`<div style="background:#3a2a00;border:1px solid #b8860b;border-radius:6px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:#f0c040"><strong>Note:</strong> ${outsideEntries.length} entry${outsideEntries.length>1?"ies":""} (${outsideHrs.toFixed(1)} hrs) dated outside the current pay period (${fmtDate(pd[0])} – ${fmtDate(pd[13])}). These count toward totals above but won't appear in Timesheet or Reports.</div>`:""}
 
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">
       <div class="dash-card"><div style="font-size:12px;color:var(--text-dim);margin-bottom:4px">Period Progress</div>
@@ -716,7 +720,7 @@ async function sendChat(){
     let parsed;
     try{let c=raw.trim().replace(/^\uFEFF/,"").replace(/^```json\s*/,"").replace(/^```\s*/,"").replace(/\s*```$/,"").trim();const m=c.match(/\{[\s\S]*\}/);if(m)c=m[0];parsed=JSON.parse(c)}catch{parsed={message:raw.replace(/[`{}"]/g,"").trim()||"Try again?",entries:[],action:"chat"}}
     parsed.entries=parsed.entries||[];parsed.action=parsed.action||(parsed.entries.length>0?"add":"chat");parsed.message=parsed.message||"Got it!";
-    if(parsed.action==="add"&&parsed.entries.length){parsed.entries.forEach(e=>{state.entries.push({date:e.date||toISO(new Date()),property:e.property||"Unknown",unit:e.unit||"",category:e.category||"General Maintenance",description:e.description||"",hours:parseFloat(e.hours)||0,id:Date.now()+Math.random()})})}
+    if(parsed.action==="add"&&parsed.entries.length){const pd=getPayDates(state.payPeriodStart);let outsideWarn=false;parsed.entries.forEach(e=>{const d=e.date||toISO(new Date());if(!pd.includes(d))outsideWarn=true;state.entries.push({date:d,property:e.property||"Unknown",unit:e.unit||"",category:e.category||"General Maintenance",description:e.description||"",hours:parseFloat(e.hours)||0,id:Date.now()+Math.random()})});if(outsideWarn)parsed.message+="\n\nHeads up: this entry's date falls outside your current pay period ("+fmtDate(pd[0])+" – "+fmtDate(pd[13])+"). It won't appear in Reports until the pay period is adjusted."}
     if(parsed.action==="delete"&&parsed.deleteIndex!=null)state.entries.splice(parsed.deleteIndex,1);
     if(parsed.action==="update"&&parsed.updateIndex!=null&&parsed.updateFields&&state.entries[parsed.updateIndex]){Object.assign(state.entries[parsed.updateIndex],parsed.updateFields)}
     let text=parsed.message;
@@ -742,7 +746,7 @@ function renderManualForm(){
   const po=ALL_PROPERTIES.map(p=>`<option value="${p}">${getPropDisplay(p)}</option>`).join(""),co=WORK_CATS.map(c=>`<option value="${c}">${c}</option>`).join("");
   document.getElementById("manualForm").innerHTML=`<div style="font-size:12px;color:var(--gold);font-weight:600;margin-bottom:10px">MANUAL ENTRY</div><div class="manual-grid"><input type="date" id="mfDate" class="manual-input" value="${toISO(new Date())}"><input type="number" id="mfHours" step="0.25" min="0" class="manual-input" placeholder="Hours"><select id="mfProp" class="manual-input"><option value="">Property...</option>${po}</select><input id="mfUnit" class="manual-input" placeholder="Unit #"><select id="mfCat" class="manual-input">${co}</select></div><textarea id="mfDesc" class="manual-input" rows="2" style="width:100%;margin-top:8px;resize:none;font-family:var(--font)" placeholder="What was done..."></textarea><div style="margin-top:8px;display:flex;gap:8px"><button class="btn-gold" onclick="submitManual()">Add</button><button class="btn-dark" onclick="toggleManualForm()">Cancel</button></div>`;
 }
-function submitManual(){const d=document.getElementById("mfDate").value,h=parseFloat(document.getElementById("mfHours").value),p=document.getElementById("mfProp").value,u=document.getElementById("mfUnit").value.trim(),c=document.getElementById("mfCat").value,desc=document.getElementById("mfDesc").value.trim();if(!h||!p||!desc){alert("Fill all fields.");return}if(c==="Turnover/Make Ready"&&!u){alert("Unit # required for turnover.");return}state.entries.push({date:d,property:p,unit:u,category:c,description:desc,hours:h,id:Date.now()});saveState();render();document.getElementById("manualForm").classList.remove("open")}
+function submitManual(){const d=document.getElementById("mfDate").value,h=parseFloat(document.getElementById("mfHours").value),p=document.getElementById("mfProp").value,u=document.getElementById("mfUnit").value.trim(),c=document.getElementById("mfCat").value,desc=document.getElementById("mfDesc").value.trim();if(!h||!p||!desc){alert("Fill all fields.");return}if(c==="Turnover/Make Ready"&&!u){alert("Unit # required for turnover.");return}const pd=getPayDates(state.payPeriodStart);if(!pd.includes(d)&&!confirm("This date ("+fmtDate(d)+") is outside your current pay period ("+fmtDate(pd[0])+" – "+fmtDate(pd[13])+"). It won't show in Reports. Add anyway?"))return;state.entries.push({date:d,property:p,unit:u,category:c,description:desc,hours:h,id:Date.now()});saveState();render();document.getElementById("manualForm").classList.remove("open")}
 function deleteEntry(idx){if(!confirm("Delete?"))return;state.entries.splice(idx,1);saveState();render()}
 function editEntry(idx){
   const e=state.entries[idx];if(!e)return;
@@ -763,8 +767,10 @@ function renderTimesheet(){
   const w1h=weekHours(state.entries,w1),w2h=weekHours(state.entries,w2);
   const w1r=Math.min(w1h,REG_HOURS),w1o=Math.max(0,w1h-REG_HOURS),w2r=Math.min(w2h,REG_HOURS),w2o=Math.max(0,w2h-REG_HOURS);
   const tr=w1r+w2r,to=w1o+w2o,tt=tr+to;
+  const outsideEntries=state.entries.filter(e=>!pd.includes(e.date));
+  const outsideHrs=outsideEntries.reduce((s,e)=>s+e.hours,0);
   function wb(label,dates,reg,ot,total){return`<div style="font-size:12px;color:var(--text-dim);letter-spacing:1px;margin-bottom:6px">${label}</div><div class="week-card">${dates.map((d,i)=>{const dh=state.entries.filter(e=>e.date===d).reduce((s,e)=>s+e.hours,0);const we=[0,6].includes(parseDate(d).getDay());return`<div class="day-row${we?" weekend":""}"><span style="font-size:13px;color:${dh>0?"var(--text)":"var(--text-dimmer)"}">${fmtDate(d)}</span><span style="font-size:14px;font-weight:600;color:${dh>0?"var(--gold)":"var(--border2)"}">${dh>0?dh.toFixed(2):"—"}</span></div>`}).join("")}<div class="week-total"><span style="font-size:12px;color:var(--text-dim)">Reg: ${reg.toFixed(2)} · OT: ${ot.toFixed(2)}</span><span style="font-size:14px;font-weight:700;color:var(--gold)">${total.toFixed(2)} hrs</span></div></div>`}
-  document.getElementById("timesheetContent").innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px"><div class="section-title" style="margin:0">${fmtDate(pd[0])} – ${fmtDate(pd[13])}</div><span style="font-size:13px;color:var(--text-dim)">${state.workerName}</span></div>${wb("WEEK 1",w1,w1r,w1o,w1h)}${wb("WEEK 2",w2,w2r,w2o,w2h)}<div class="summary-bar"><div><div style="font-size:11px;color:var(--text-dim)">REGULAR</div><div style="font-size:22px;font-weight:700">${tr.toFixed(1)}</div></div><div><div style="font-size:11px;color:var(--text-dim)">OVERTIME</div><div style="font-size:22px;font-weight:700;color:${to>0?"#f0883e":"var(--text-dimmer)"}">${to.toFixed(1)}</div></div><div><div style="font-size:11px;color:var(--text-dim)">TOTAL</div><div style="font-size:22px;font-weight:700;color:var(--gold)">${tt.toFixed(1)}</div></div></div>`;
+  document.getElementById("timesheetContent").innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px"><div class="section-title" style="margin:0">${fmtDate(pd[0])} – ${fmtDate(pd[13])}</div><span style="font-size:13px;color:var(--text-dim)">${state.workerName}</span></div>${outsideEntries.length>0?`<div style="background:#3a2a00;border:1px solid #b8860b;border-radius:6px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:#f0c040"><strong>Warning:</strong> ${outsideEntries.length} entry${outsideEntries.length>1?"ies":""} (${outsideHrs.toFixed(1)} hrs) dated outside this pay period are not shown here.</div>`:""}${wb("WEEK 1",w1,w1r,w1o,w1h)}${wb("WEEK 2",w2,w2r,w2o,w2h)}<div class="summary-bar"><div><div style="font-size:11px;color:var(--text-dim)">REGULAR</div><div style="font-size:22px;font-weight:700">${tr.toFixed(1)}</div></div><div><div style="font-size:11px;color:var(--text-dim)">OVERTIME</div><div style="font-size:22px;font-weight:700;color:${to>0?"#f0883e":"var(--text-dimmer)"}">${to.toFixed(1)}</div></div><div><div style="font-size:11px;color:var(--text-dim)">TOTAL</div><div style="font-size:22px;font-weight:700;color:var(--gold)">${tt.toFixed(1)}</div></div></div>`;
 }
 
 // ═══ ENTRIES ═══
@@ -782,10 +788,13 @@ function renderReports(){
   const pd=getPayDates(state.payPeriodStart),w1h=weekHours(state.entries,pd.slice(0,7)),w2h=weekHours(state.entries,pd.slice(7,14));
   const tr=Math.min(w1h,REG_HOURS)+Math.min(w2h,REG_HOURS),to=Math.max(0,w1h-REG_HOURS)+Math.max(0,w2h-REG_HOURS);
   const gt=state.entries.reduce((s,e)=>s+e.hours,0),has=state.entries.length>0;
+  const outsideEntries=state.entries.filter(e=>!pd.includes(e.date));
+  const outsideHrs=outsideEntries.reduce((s,e)=>s+e.hours,0);
   const byEntity={};state.entries.forEach(e=>{const ent=getEntity(e.property);if(!byEntity[ent])byEntity[ent]={};if(!byEntity[ent][e.property])byEntity[ent][e.property]=[];byEntity[ent][e.property].push(e)});
 
   document.getElementById("reportsContent").innerHTML=`
     <div class="section-title">PERIOD REPORTS</div>
+    ${outsideEntries.length>0?`<div style="background:#3a2a00;border:1px solid #b8860b;border-radius:6px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:#f0c040"><strong>Warning:</strong> ${outsideEntries.length} entry${outsideEntries.length>1?"ies":""} (${outsideHrs.toFixed(1)} hrs) dated outside this pay period (${fmtDate(pd[0])} – ${fmtDate(pd[13])}) are excluded from reports. Check Entries tab for details.</div>`:""}
     <div class="report-grid">
       <div class="report-card"><div style="font-size:15px;font-weight:700;margin-bottom:6px">Payroll</div><div style="font-size:12px;color:var(--text-dim);margin-bottom:10px">${tr.toFixed(1)} reg + ${to.toFixed(1)} OT = ${(tr+to).toFixed(1)} hrs</div><button style="padding:9px;border:none;cursor:${has?"pointer":"default"};font-size:12px;font-weight:600;border-radius:4px;width:100%;font-family:var(--font);background:${has?"var(--gold)":"#444"};color:${has?"#111":"#777"}" onclick="${has?"showPayroll()":""}">View</button></div>
       <div class="report-card"><div style="font-size:15px;font-weight:700;margin-bottom:6px">Invoice</div><div style="font-size:12px;color:var(--text-dim);margin-bottom:10px">${Object.keys(byEntity).length} entities · $${(gt*HOURLY_RATE).toFixed(2)}</div><button style="padding:9px;border:none;cursor:${has?"pointer":"default"};font-size:12px;font-weight:600;border-radius:4px;width:100%;font-family:var(--font);background:${has?"var(--gold)":"#444"};color:${has?"#111":"#777"}" onclick="${has?"showBilling()":""}">View</button></div>
