@@ -428,6 +428,7 @@ async function retryBuildiumBill(idx){
     const data=await resp.json();
     if(data.success){
       a.buildiumBillId=data.checkId||data.billId;
+      if(data.depositId)a.buildiumDepositId=data.depositId;
       saveState();renderArchive();
       let msg="✅ Buildium check #"+(data.checkId||data.billId)+" created — $"+(data.totalAmount||a.totalBilled).toFixed(2);
       if(data.depositId)msg+="\n💰 ZREM deposit #"+data.depositId+" created";
@@ -437,6 +438,28 @@ async function retryBuildiumBill(idx){
       alert(msg);
     } else {
       alert("❌ Buildium check failed: "+(data.error||"Unknown error"));
+    }
+  }catch(e){alert("❌ Request failed: "+e.message);}
+}
+async function createDepositOnly(idx){
+  const a=state.archive[idx];
+  if(!a){alert("Archive not found.");return;}
+  if(a.buildiumDepositId){alert("Deposit #"+a.buildiumDepositId+" already exists.");return;}
+  if(!state.buildiumUrl){alert("Buildium URL not configured in Settings.");return;}
+  if(!confirm("Create ZREM Operating deposit for $"+a.totalBilled.toFixed(2)+"?"))return;
+  try{
+    const resp=await fetch(state.buildiumUrl,{
+      method:"POST",
+      headers:{"Content-Type":"text/plain"},
+      body:JSON.stringify({action:"zrem-deposit-only",workerName:a.workerName,periodStart:a.periodStart,amount:a.totalBilled,checkId:a.buildiumBillId,memo:"ZREM Maintenance — "+a.label})
+    });
+    const data=await resp.json();
+    if(data.success){
+      a.buildiumDepositId=data.depositId;
+      saveState();renderArchive();
+      alert("✅ ZREM deposit #"+data.depositId+" created — $"+a.totalBilled.toFixed(2)+"\n\n📧 Transfer reminder email sent.");
+    } else {
+      alert("❌ Deposit failed: "+(data.error||"Unknown error"));
     }
   }catch(e){alert("❌ Request failed: "+e.message);}
 }
@@ -607,7 +630,7 @@ function viewArchivedPeriod(idx){
     </div>
     <div class="section-title" style="color:var(--text-dim)">ALL ENTRIES (${a.entryCount})</div>
     <div class="dash-card">${entriesHtml}</div>
-    ${a.buildiumBillId?`<div style="margin-top:12px;padding:10px 14px;background:#1a3a1a;border:1px solid #2a5a2a;border-radius:6px;font-size:12px;color:#8e8">✅ Buildium check #${a.buildiumBillId} created</div>`:`<button class="btn-gold" style="margin-top:12px;width:100%" onclick="retryBuildiumBill(${idx})">💳 Create Buildium Check + Deposit</button>`}
+    ${a.buildiumBillId?`<div style="margin-top:12px;padding:10px 14px;background:#1a3a1a;border:1px solid #2a5a2a;border-radius:6px;font-size:12px;color:#8e8">✅ Buildium check #${a.buildiumBillId} created${a.buildiumDepositId?" · Deposit #"+a.buildiumDepositId:""}</div>${!a.buildiumDepositId?`<button class="btn-gold" style="margin-top:8px;width:100%" onclick="createDepositOnly(${idx})">💰 Create ZREM Deposit Only</button>`:""}`:`<button class="btn-gold" style="margin-top:12px;width:100%" onclick="retryBuildiumBill(${idx})">💳 Create Buildium Check + Deposit</button>`}
     <button class="btn-danger" style="margin-top:12px" onclick="if(confirm('Delete this archived period permanently?')){state.archive.splice(${idx},1);saveState();renderArchive();}">Delete This Archive</button>`;
 }
 
