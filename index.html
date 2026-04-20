@@ -831,11 +831,11 @@ function renderReports(){
 }
 
 // ═══ SUBMIT & EMAIL ═══
+function blobToBase64(blob){return new Promise((resolve,reject)=>{const r=new FileReader();r.onloadend=()=>resolve(String(r.result).split(",")[1]);r.onerror=reject;r.readAsDataURL(blob)});}
 async function submitAndEmail(){
   if(!state.entries.length){alert("No entries.");return}
   const pd=getPayDates(state.payPeriodStart),totalHrs=state.entries.reduce((s,e)=>s+e.hours,0),periodLabel=`${fmtDate(pd[0])} – ${fmtDate(pd[13])}`;
   const w1h=weekHours(state.entries,pd.slice(0,7)),w2h=weekHours(state.entries,pd.slice(7,14)),tr=Math.min(w1h,REG_HOURS)+Math.min(w2h,REG_HOURS),to=Math.max(0,w1h-REG_HOURS)+Math.max(0,w2h-REG_HOURS);
-  if(!confirm(`Submit?\n\n${state.entries.length} entries · ${totalHrs.toFixed(1)} hrs · $${(totalHrs*HOURLY_RATE).toFixed(2)}\n${periodLabel}`))return;
   const statusEl=document.getElementById("submitStatus"),btnEl=document.getElementById("submitBtn");
   statusEl.style.display="block";statusEl.style.background="#1a2a3a";statusEl.style.border="1px solid #2a4a6a";statusEl.style.color="#8ac";statusEl.textContent="📄 Generating PDFs...";
   btnEl.disabled=true;btnEl.style.background="#444";btnEl.style.color="#777";btnEl.textContent="Generating...";
@@ -963,15 +963,25 @@ async function submitAndEmail(){
     const bBlob=buildInvoicePdf();
     const bFile=new File([bBlob],`ZREM-Invoice-${state.workerName}-${state.payPeriodStart}.pdf`,{type:"application/pdf"});
     window._pdfs={pFile,bFile,pBlob,bBlob};
-    const canShare=navigator.canShare&&navigator.canShare({files:[pFile,bFile]});
-    if(canShare){
-      statusEl.style.background="#1a3a1a";statusEl.style.border="1px solid #2a5a2a";statusEl.style.color="#8e8";statusEl.innerHTML="✅ Opening share sheet...";
-      try{await navigator.share({title:`ZREM Reports — ${periodLabel}`,text:`Nick — reports for ${periodLabel}.\nTotal: ${totalHrs.toFixed(2)} hrs ($${(totalHrs*HOURLY_RATE).toFixed(2)})\n— ${state.workerName}`,files:[pFile,bFile]});statusEl.innerHTML="✅ <strong>PDFs shared!</strong>";btnEl.textContent="✓ Submitted";btnEl.style.background="var(--success)";btnEl.style.color="#fff";return}catch{statusEl.innerHTML="📄 Share cancelled. Use buttons below.";statusEl.style.background="#1a2a3a";statusEl.style.color="#8ac"}
-    } else {statusEl.style.background="#1a3a1a";statusEl.style.border="1px solid #2a5a2a";statusEl.style.color="#8e8";statusEl.innerHTML="✅ PDFs ready! Download below."}
-    const subj=encodeURIComponent(`ZREM Report — ${state.workerName} — ${periodLabel}`),body=encodeURIComponent(`Nick,\n\nAttached: reports for ${periodLabel}.\nTotal: ${totalHrs.toFixed(2)} hrs ($${(totalHrs*HOURLY_RATE).toFixed(2)})\n\n— ${state.workerName}`);
+    // Send to server which emails Nick with PDFs attached
+    statusEl.style.background="#1a2a3a";statusEl.style.border="1px solid #2a4a6a";statusEl.style.color="#8ac";statusEl.innerHTML="📤 Sending email to Nick...";
+    try{
+      const pB64=await blobToBase64(pBlob),bB64=await blobToBase64(bBlob);
+      const resp=await fetch(state.syncUrl||state.buildiumUrl,{method:"POST",headers:{"Content-Type":"text/plain"},body:JSON.stringify({action:"zrem-email-report",workerName:state.workerName,periodLabel:periodLabel,periodStart:state.payPeriodStart,totalHours:totalHrs,totalAmount:totalHrs*HOURLY_RATE,payrollPdfBase64:pB64,invoicePdfBase64:bB64})});
+      const respData=await resp.json();
+      if(respData.success){
+        statusEl.style.background="#1a3a1a";statusEl.style.border="1px solid #2a5a2a";statusEl.style.color="#8e8";statusEl.innerHTML="✅ <strong>Email sent to Nick!</strong>";
+        btnEl.textContent="✓ Sent";btnEl.style.background="var(--success)";btnEl.style.color="#fff";
+      } else {
+        throw new Error(respData.error||"Server rejected the email");
+      }
+    }catch(err){
+      statusEl.style.background="#3a1a1a";statusEl.style.border="1px solid #5a2a2a";statusEl.style.color="#e88";
+      statusEl.innerHTML="❌ Server email failed: "+err.message+". Use download buttons below.";
+    }
     const pUrl=URL.createObjectURL(pBlob),bUrl=URL.createObjectURL(bBlob);
     let ex=document.getElementById("submitActions");if(ex)ex.remove();
-    statusEl.insertAdjacentHTML("afterend",`<div id="submitActions" style="display:flex;flex-direction:column;gap:8px;margin-top:12px">${canShare?`<button onclick="navigator.share({title:'ZREM',files:[window._pdfs.pFile,window._pdfs.bFile]}).catch(()=>{})" style="width:100%;padding:12px;background:var(--gold);color:#111;border:none;cursor:pointer;font-size:13px;font-weight:600;border-radius:6px;font-family:var(--font)">📤 Share Again</button>`:""}<a href="mailto:nick@zebrarentals.com?subject=${subj}&body=${body}" style="display:block;padding:12px;background:var(--gold);color:#111;border:none;font-size:13px;font-weight:600;border-radius:6px;font-family:var(--font);text-align:center;text-decoration:none">✉️ Open Email to Nick</a><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><a href="${pUrl}" download="ZREM-Payroll.pdf" style="display:block;padding:12px;background:var(--surface2);color:var(--text);border:1px solid var(--border2);font-size:12px;font-weight:600;border-radius:6px;font-family:var(--font);text-align:center;text-decoration:none">📥 Payroll PDF</a><a href="${bUrl}" download="ZREM-Invoice.pdf" style="display:block;padding:12px;background:var(--surface2);color:var(--text);border:1px solid var(--border2);font-size:12px;font-weight:600;border-radius:6px;font-family:var(--font);text-align:center;text-decoration:none">📥 Invoice PDF</a></div></div>`);
+    statusEl.insertAdjacentHTML("afterend",`<div id="submitActions" style="display:flex;flex-direction:column;gap:8px;margin-top:12px"><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><a href="${pUrl}" download="ZREM-Payroll.pdf" style="display:block;padding:12px;background:var(--surface2);color:var(--text);border:1px solid var(--border2);font-size:12px;font-weight:600;border-radius:6px;font-family:var(--font);text-align:center;text-decoration:none">📥 Payroll PDF</a><a href="${bUrl}" download="ZREM-Invoice.pdf" style="display:block;padding:12px;background:var(--surface2);color:var(--text);border:1px solid var(--border2);font-size:12px;font-weight:600;border-radius:6px;font-family:var(--font);text-align:center;text-decoration:none">📥 Invoice PDF</a></div></div>`);
   }catch(err){console.error(err);statusEl.style.background="#3a1a1a";statusEl.style.border="1px solid #5a2a2a";statusEl.style.color="#e88";statusEl.innerHTML=`❌ ${err.message}`}
   btnEl.disabled=false;btnEl.style.background="var(--gold)";btnEl.style.color="#111";btnEl.textContent="📨 Submit & Email PDFs to Nick";
 }
