@@ -412,6 +412,31 @@ async function syncToSheet(){
     console.warn("Sheet sync failed:",e);
   }
 }
+async function retryBuildiumBill(idx){
+  const a=state.archive[idx];
+  if(!a){alert("Archive not found.");return;}
+  if(a.buildiumBillId){alert("Bill #"+a.buildiumBillId+" already exists for this period.");return;}
+  if(!state.buildiumUrl){alert("Buildium URL not configured in Settings.");return;}
+  if(!confirm("Create Buildium bill for "+a.label+"?\n\n"+a.entryCount+" entries · "+a.totalHours.toFixed(1)+" hrs · $"+a.totalBilled.toFixed(2)))return;
+  const pd=getPayDates(a.periodStart||a.entries[0]?.date||toISO(new Date()));
+  try{
+    const resp=await fetch(state.buildiumUrl,{
+      method:"POST",
+      headers:{"Content-Type":"text/plain"},
+      body:JSON.stringify({action:"zrem-bill",workerName:a.workerName,payPeriodStart:a.periodStart||pd[0],payPeriodEnd:pd[13],hourlyRate:HOURLY_RATE,entries:a.entries})
+    });
+    const data=await resp.json();
+    if(data.success){
+      a.buildiumBillId=data.billId;
+      saveState();renderArchive();
+      let msg="✅ Buildium bill #"+data.billId+" created — $"+(data.totalAmount||a.totalBilled).toFixed(2);
+      if(data.warnings)msg+="\n\n⚠ "+data.warnings;
+      alert(msg);
+    } else {
+      alert("❌ Buildium bill failed: "+(data.error||"Unknown error"));
+    }
+  }catch(e){alert("❌ Request failed: "+e.message);}
+}
 async function manualSync(){
   if(!state.syncUrl){alert("No sync URL configured.");return;}
   const el=document.getElementById("syncStatus");
@@ -579,6 +604,7 @@ function viewArchivedPeriod(idx){
     </div>
     <div class="section-title" style="color:var(--text-dim)">ALL ENTRIES (${a.entryCount})</div>
     <div class="dash-card">${entriesHtml}</div>
+    ${a.buildiumBillId?`<div style="margin-top:12px;padding:10px 14px;background:#1a3a1a;border:1px solid #2a5a2a;border-radius:6px;font-size:12px;color:#8e8">✅ Buildium bill #${a.buildiumBillId} created</div>`:`<button class="btn-gold" style="margin-top:12px;width:100%" onclick="retryBuildiumBill(${idx})">💳 Create Buildium Bill for This Period</button>`}
     <button class="btn-danger" style="margin-top:12px" onclick="if(confirm('Delete this archived period permanently?')){state.archive.splice(${idx},1);saveState();renderArchive();}">Delete This Archive</button>`;
 }
 
