@@ -223,6 +223,7 @@
         </div>
       </div>
       <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn-gold" onclick="restoreFromSheet()">Restore from Sheet</button>
         <button class="btn-danger" onclick="if(confirm('Clear current period entries?')){state.entries=[];saveState();render();}">Clear Entries</button>
         <button class="btn-dark" onclick="state.chatHistory=[];saveState();render();">Clear Chat</button>
         <button class="btn-dark" onclick="doLogout()">Logout</button>
@@ -347,6 +348,23 @@ function updateApiKey(){const k=document.getElementById("settingsApiKey").value.
 function updatePassword(){const pw=document.getElementById("settingsNewPassword").value;if(!pw||pw.length<4)return alert("4+ chars.");const a=getAuth();if(a){if(a.admin)a.admin.passwordHash=simpleHash(pw);else a.passwordHash=simpleHash(pw);setAuth(a)}document.getElementById("settingsNewPassword").value="";alert("Admin password updated.")}
 function updateWorkerPassword(){const pw=document.getElementById("settingsWorkerPassword").value;if(!pw||pw.length<4)return alert("4+ chars.");const a=getAuth();if(a&&a.worker){a.worker.passwordHash=simpleHash(pw);setAuth(a)}document.getElementById("settingsWorkerPassword").value="";alert("Worker password updated.")}
 function updateSyncUrl(){const u=document.getElementById("settingsSyncUrl").value.trim();state.syncUrl=u;saveState();document.getElementById("settingsSyncUrl").value="";if(u){alert("Sync URL saved. Entries will sync to Google Sheets.");syncToSheet()}else{alert("Sync URL cleared. Sheet sync disabled.");updateSyncIndicator()}}
+async function restoreFromSheet(){
+  if(!state.syncUrl){alert("No sync URL configured.");return;}
+  if(state.entries.length>0&&!confirm("This will REPLACE all "+state.entries.length+" current entries with what's in the Google Sheet. Continue?"))return;
+  if(state.entries.length===0&&!confirm("Load entries from Google Sheet for "+state.workerName+"?"))return;
+  // Pause auto-sync so we don't overwrite the sheet while loading
+  clearTimeout(syncTimer);
+  try{
+    const url=state.syncUrl+(state.syncUrl.includes("?")?"&":"?")+"page=zrem-entries&worker="+encodeURIComponent(state.workerName);
+    const resp=await fetch(url);
+    const data=await resp.json();
+    if(!data.entries){alert("No entries returned from sheet.");return;}
+    state.entries=data.entries;
+    saveState();
+    render();
+    alert("Restored "+data.entries.length+" entries from the Google Sheet.");
+  }catch(e){alert("Restore failed: "+e.message);}
+}
 function updateBuildiumUrl(){const u=document.getElementById("settingsBuildiumUrl").value.trim();state.buildiumUrl=u;saveState();document.getElementById("settingsBuildiumUrl").value="";alert(u?"Buildium URL saved. Bills will be created when you archive a pay period.":"Buildium URL cleared. Auto-bill disabled.")}
 
 // ═══ STATE ═══
