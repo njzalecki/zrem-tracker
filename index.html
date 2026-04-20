@@ -536,41 +536,14 @@ async function archivePeriod(){
   if(state.entries.length===0){alert("No entries to archive.");return}
   const pd=getPayDates(state.payPeriodStart);
   const label=`${fmtDate(pd[0])} – ${fmtDate(pd[13])}`;
-  if(!confirm(`Archive this pay period?\n\n${label}\n${state.entries.length} entries\n\nThis will save the period and clear current entries for a new period.`))return;
+  if(!confirm(`Archive this pay period?\n\n${label}\n${state.entries.length} entries\n\nMake sure you've already tapped "Submit & Email PDFs to Nick" — that's what creates the Buildium check. This button just clears entries for the next period.`))return;
   const totalHrs=state.entries.reduce((s,e)=>s+e.hours,0);
-
-  // Submit bill to Buildium if configured
-  let buildiumBillId=null;
-  if(state.buildiumUrl){
-    try{
-      const payload={
-        action:'zrem-bill',
-        workerName:state.workerName,
-        payPeriodStart:pd[0],
-        payPeriodEnd:pd[13],
-        hourlyRate:HOURLY_RATE,
-        entries:state.entries
-      };
-      const resp=await fetch(state.buildiumUrl,{method:'POST',headers:{'Content-Type':'text/plain'},body:JSON.stringify(payload),redirect:'follow'});
-      const text=await resp.text();
-      const result=JSON.parse(text);
-      if(result.success){
-        buildiumBillId=result.billId;
-        alert(`Buildium bill created!\n\nBill #${result.billId}\n${result.lineCount} line items — $${result.totalAmount.toFixed(2)}${result.warnings?'\n\n⚠️ '+result.warnings:''}`);
-      }else{
-        if(!confirm(`Buildium bill failed: ${result.error}\n\nArchive anyway without creating the bill?`))return;
-      }
-    }catch(err){
-      if(!confirm(`Buildium connection error: ${err.message}\n\nArchive anyway without creating the bill?`))return;
-    }
-  }
 
   state.archive.push({
     id:Date.now(),periodStart:state.payPeriodStart,label,
     entries:[...state.entries],workerName:state.workerName,
     totalHours:totalHrs,totalBilled:totalHrs*HOURLY_RATE,
-    archivedAt:new Date().toISOString(),entryCount:state.entries.length,
-    buildiumBillId:buildiumBillId
+    archivedAt:new Date().toISOString(),entryCount:state.entries.length
   });
   // Advance pay period by 14 days
   const nextStart=new Date(parseDate(state.payPeriodStart));
@@ -630,7 +603,7 @@ function viewArchivedPeriod(idx){
     </div>
     <div class="section-title" style="color:var(--text-dim)">ALL ENTRIES (${a.entryCount})</div>
     <div class="dash-card">${entriesHtml}</div>
-    ${a.buildiumBillId?`<div style="margin-top:12px;padding:10px 14px;background:#1a3a1a;border:1px solid #2a5a2a;border-radius:6px;font-size:12px;color:#8e8">✅ Buildium check #${a.buildiumBillId} created${a.buildiumDepositId?" · Deposit #"+a.buildiumDepositId:""}</div>${!a.buildiumDepositId?`<button class="btn-gold" style="margin-top:8px;width:100%" onclick="createDepositOnly(${idx})">💰 Create ZREM Deposit Only</button>`:""}`:`<button class="btn-gold" style="margin-top:12px;width:100%" onclick="retryBuildiumBill(${idx})">💳 Create Buildium Check + Deposit</button>`}
+    ${isAdminSession()?(a.buildiumBillId?`<div style="margin-top:12px;padding:10px 14px;background:#1a3a1a;border:1px solid #2a5a2a;border-radius:6px;font-size:12px;color:#8e8">✅ Buildium check #${a.buildiumBillId} created${a.buildiumDepositId?" · Deposit #"+a.buildiumDepositId:""}</div>${!a.buildiumDepositId?`<button class="btn-gold" style="margin-top:8px;width:100%" onclick="createDepositOnly(${idx})">💰 Create ZREM Deposit Only</button>`:""}`:`<button class="btn-gold" style="margin-top:12px;width:100%" onclick="retryBuildiumBill(${idx})">💳 Create Buildium Check + Deposit</button>`):""}
     <button class="btn-danger" style="margin-top:12px" onclick="if(confirm('Delete this archived period permanently?')){state.archive.splice(${idx},1);saveState();renderArchive();}">Delete This Archive</button>`;
 }
 
@@ -898,6 +871,7 @@ function renderReports(){
 
 // ═══ SUBMIT & EMAIL ═══
 function blobToBase64(blob){return new Promise((resolve,reject)=>{const r=new FileReader();r.onloadend=()=>resolve(String(r.result).split(",")[1]);r.onerror=reject;r.readAsDataURL(blob)});}
+function isAdminSession(){try{const s=JSON.parse(localStorage.getItem("zrem-session")||sessionStorage.getItem("zrem-session-temp")||"{}");return s.role==="admin"||s.isAdmin===true;}catch{return false;}}
 async function submitAndEmail(){
   if(!state.entries.length){alert("No entries.");return}
   const pd=getPayDates(state.payPeriodStart),totalHrs=state.entries.reduce((s,e)=>s+e.hours,0),periodLabel=`${fmtDate(pd[0])} – ${fmtDate(pd[13])}`;
@@ -1029,21 +1003,27 @@ async function submitAndEmail(){
     const bBlob=buildInvoicePdf();
     const bFile=new File([bBlob],`ZREM-Invoice-${state.workerName}-${state.payPeriodStart}.pdf`,{type:"application/pdf"});
     window._pdfs={pFile,bFile,pBlob,bBlob};
-    // Send to server which emails Nick with PDFs attached
-    statusEl.style.background="#1a2a3a";statusEl.style.border="1px solid #2a4a6a";statusEl.style.color="#8ac";statusEl.innerHTML="📤 Sending email to Nick...";
+    // Send to server: email Nick + create Buildium check+deposit with PDFs attached
+    statusEl.style.background="#1a2a3a";statusEl.style.border="1px solid #2a4a6a";statusEl.style.color="#8ac";statusEl.innerHTML="📤 Emailing Nick and creating Buildium check + deposit...";
     try{
       const pB64=await blobToBase64(pBlob),bB64=await blobToBase64(bBlob);
-      const resp=await fetch(state.syncUrl||state.buildiumUrl,{method:"POST",headers:{"Content-Type":"text/plain"},body:JSON.stringify({action:"zrem-email-report",workerName:state.workerName,periodLabel:periodLabel,periodStart:state.payPeriodStart,totalHours:totalHrs,totalAmount:totalHrs*HOURLY_RATE,payrollPdfBase64:pB64,invoicePdfBase64:bB64})});
+      const pd=getPayDates(state.payPeriodStart);
+      const resp=await fetch(state.syncUrl||state.buildiumUrl,{method:"POST",headers:{"Content-Type":"text/plain"},body:JSON.stringify({action:"zrem-submit-all",workerName:state.workerName,periodLabel:periodLabel,periodStart:state.payPeriodStart,payPeriodStart:pd[0],payPeriodEnd:pd[13],hourlyRate:HOURLY_RATE,totalHours:totalHrs,totalAmount:totalHrs*HOURLY_RATE,entries:state.entries,payrollPdfBase64:pB64,invoicePdfBase64:bB64})});
       const respData=await resp.json();
       if(respData.success){
-        statusEl.style.background="#1a3a1a";statusEl.style.border="1px solid #2a5a2a";statusEl.style.color="#8e8";statusEl.innerHTML="✅ <strong>Email sent to Nick!</strong>";
+        statusEl.style.background="#1a3a1a";statusEl.style.border="1px solid #2a5a2a";statusEl.style.color="#8e8";
+        let msg="✅ <strong>Done!</strong> Email sent to Nick.";
+        if(respData.checkId)msg+="<br>💳 Buildium check #"+respData.checkId+" created with PDFs attached.";
+        if(respData.depositId)msg+="<br>💰 ZREM deposit #"+respData.depositId+" created.";
+        if(respData.warnings)msg+="<br>⚠ "+respData.warnings;
+        statusEl.innerHTML=msg;
         btnEl.textContent="✓ Sent";btnEl.style.background="var(--success)";btnEl.style.color="#fff";
       } else {
-        throw new Error(respData.error||"Server rejected the email");
+        throw new Error(respData.error||"Server rejected the request");
       }
     }catch(err){
       statusEl.style.background="#3a1a1a";statusEl.style.border="1px solid #5a2a2a";statusEl.style.color="#e88";
-      statusEl.innerHTML="❌ Server email failed: "+err.message+". Use download buttons below.";
+      statusEl.innerHTML="❌ Submit failed: "+err.message+". Use download buttons below.";
     }
     const pUrl=URL.createObjectURL(pBlob),bUrl=URL.createObjectURL(bBlob);
     let ex=document.getElementById("submitActions");if(ex)ex.remove();
