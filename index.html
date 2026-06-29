@@ -767,7 +767,7 @@ async function sendChat(){
     for(const m of recentChat){if(m.role==="user")messages.push({role:"user",content:m.text});else{const s=m.entriesAdded>0?`[System: ${m.entriesAdded} logged. Shown: "${m.text.slice(0,80)}"]`:`[System: No entries. Shown: "${m.text.slice(0,80)}"]`;messages.push({role:"assistant",content:s})}}
     while(messages.length&&messages[0].role==="assistant")messages.shift();
     const clean=[];for(const m of messages){if(!clean.length||clean[clean.length-1].role!==m.role)clean.push(m)}
-    const resp=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json","x-api-key":state.apiKey,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:1000,system:sys,messages:clean})});
+    const resp=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json","x-api-key":state.apiKey,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},body:JSON.stringify({model:"claude-sonnet-4-6",max_tokens:1000,system:sys,messages:clean})});
     const data=await resp.json();
     if(data.error)throw new Error(data.error.message||"API error");
     const raw=data.content?.map(c=>c.text||"").join("")||"";
