@@ -203,9 +203,6 @@
         <div><label class="field-label">Technician Name</label><input id="workerName" class="field-input" oninput="saveState()"></div>
         <div><label class="field-label">Pay Period Start</label><input id="payPeriodStart" type="date" class="field-input" oninput="saveState();render();"></div>
       </div>
-      <div class="settings-grid" style="margin-top:10px">
-        <div><label class="field-label">Anthropic API Key (for AI chat)</label><input id="settingsApiKey" type="password" class="field-input" placeholder="sk-ant-..."><button class="btn-dark" style="margin-top:6px" onclick="updateApiKey()">Update Key</button><div class="auth-note" style="margin-top:4px">Stored only in this browser.</div></div>
-      </div>
       <div id="adminSettingsSection" style="display:none;margin-top:14px;padding-top:14px;border-top:1px solid var(--border)">
         <div class="settings-title">ADMIN</div>
         <div class="settings-grid">
@@ -760,7 +757,7 @@ EXAMPLE clarification: {"message":"Which unit?","entries":[],"action":"chat","de
 async function sendChat(){
   const input=document.getElementById("chatInput"),msg=input.value.trim();
   if(!msg||isProcessing)return;
-  if(!state.apiKey){state.chatHistory.push({role:"assistant",text:"⚙️ No Anthropic API key set. Open Settings (gear icon) and paste your key under \"Anthropic API Key\" to use the chat.",time:timeStr()});renderChat();return;}
+  if(!state.syncUrl){state.chatHistory.push({role:"assistant",text:"⚙️ Chat isn't connected yet. Set the Sync URL in Settings (gear icon) so the app can reach the server.",time:timeStr()});renderChat();return;}
   state.chatHistory.push({role:"user",text:msg,time:timeStr()});
   input.value="";updateSendBtn();isProcessing=true;renderChat();
   try{
@@ -770,7 +767,7 @@ async function sendChat(){
     for(const m of recentChat){if(m.role==="user")messages.push({role:"user",content:m.text});else{const s=m.entriesAdded>0?`[System: ${m.entriesAdded} logged. Shown: "${m.text.slice(0,80)}"]`:`[System: No entries. Shown: "${m.text.slice(0,80)}"]`;messages.push({role:"assistant",content:s})}}
     while(messages.length&&messages[0].role==="assistant")messages.shift();
     const clean=[];for(const m of messages){if(!clean.length||clean[clean.length-1].role!==m.role)clean.push(m)}
-    const resp=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json","x-api-key":state.apiKey,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},body:JSON.stringify({model:"claude-sonnet-4-6",max_tokens:1000,system:sys,messages:clean})});
+    const resp=await fetch(state.syncUrl,{method:"POST",headers:{"Content-Type":"text/plain"},body:JSON.stringify({action:"zrem-chat",max_tokens:1000,system:sys,messages:clean})});
     const data=await resp.json();
     if(data.error)throw new Error(data.error.message||"API error");
     const raw=data.content?.map(c=>c.text||"").join("")||"";
