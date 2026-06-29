@@ -203,11 +203,14 @@
         <div><label class="field-label">Technician Name</label><input id="workerName" class="field-input" oninput="saveState()"></div>
         <div><label class="field-label">Pay Period Start</label><input id="payPeriodStart" type="date" class="field-input" oninput="saveState();render();"></div>
       </div>
+      <div class="settings-grid" style="margin-top:10px">
+        <div><label class="field-label">Anthropic API Key (for AI chat)</label><input id="settingsApiKey" type="password" class="field-input" placeholder="sk-ant-..."><button class="btn-dark" style="margin-top:6px" onclick="updateApiKey()">Update Key</button><div class="auth-note" style="margin-top:4px">Stored only in this browser.</div></div>
+      </div>
       <div id="adminSettingsSection" style="display:none;margin-top:14px;padding-top:14px;border-top:1px solid var(--border)">
         <div class="settings-title">ADMIN</div>
         <div class="settings-grid">
-          <div><label class="field-label">API Key</label><input id="settingsApiKey" type="password" class="field-input" placeholder="sk-ant-..."><button class="btn-dark" style="margin-top:6px" onclick="updateApiKey()">Update Key</button></div>
           <div><label class="field-label">Change Admin Password</label><input id="settingsNewPassword" type="password" class="field-input" placeholder="New admin password"><button class="btn-dark" style="margin-top:6px" onclick="updatePassword()">Update Admin Password</button></div>
+          <div></div>
         </div>
         <div class="settings-grid" style="margin-top:10px">
           <div><label class="field-label">Reset Worker Password</label><input id="settingsWorkerPassword" type="password" class="field-input" placeholder="New worker password"><button class="btn-dark" style="margin-top:6px" onclick="updateWorkerPassword()">Update Worker Password</button></div>
@@ -687,11 +690,10 @@ async function fetchServerConfig(){
   try{
     const resp=await fetch(CONFIG_URL);
     const cfg=await resp.json();
-    if(cfg&&cfg.apiKey&&cfg.admin){
-      const auth={admin:cfg.admin,apiKey:cfg.apiKey};
+    if(cfg&&cfg.admin){
+      const auth={admin:cfg.admin};
       if(cfg.worker)auth.worker=cfg.worker;
       setAuth(auth);
-      state.apiKey=cfg.apiKey;
       if(cfg.workerName)state.workerName=cfg.workerName;
       if(cfg.buildiumUrl){state.buildiumUrl=cfg.buildiumUrl;if(!state.syncUrl)state.syncUrl=cfg.buildiumUrl;}
       saveState();
@@ -706,7 +708,7 @@ async function init(){
   if(!session){try{session=JSON.parse(sessionStorage.getItem("zrem-session-temp"))||null}catch{}}
   if(!auth){document.getElementById("adminPayDate").value=state.payPeriodStart;showScreen("adminSetupScreen")}
   else if(!session||!session.loggedIn){document.getElementById("loginUsername").value="";const regLink=document.getElementById("workerRegLink");if(regLink)regLink.style.display=(!auth.worker)?"block":"none";showScreen("loginScreen")}
-  else{state.apiKey=auth.apiKey;showScreen("mainApp");document.getElementById("headerUser").textContent=session.user;const isAdmin=session.role==="admin"||session.isAdmin===true;document.getElementById("adminSettingsSection").style.display=isAdmin?"block":"none";render();}
+  else{state.apiKey=auth.apiKey||state.apiKey||"";showScreen("mainApp");document.getElementById("headerUser").textContent=session.user;const isAdmin=session.role==="admin"||session.isAdmin===true;document.getElementById("adminSettingsSection").style.display=isAdmin?"block":"none";render();}
   document.getElementById("chatInput")?.addEventListener("input",updateSendBtn);
   initReminder();
   updateSyncIndicator();
@@ -758,6 +760,7 @@ EXAMPLE clarification: {"message":"Which unit?","entries":[],"action":"chat","de
 async function sendChat(){
   const input=document.getElementById("chatInput"),msg=input.value.trim();
   if(!msg||isProcessing)return;
+  if(!state.apiKey){state.chatHistory.push({role:"assistant",text:"⚙️ No Anthropic API key set. Open Settings (gear icon) and paste your key under \"Anthropic API Key\" to use the chat.",time:timeStr()});renderChat();return;}
   state.chatHistory.push({role:"user",text:msg,time:timeStr()});
   input.value="";updateSendBtn();isProcessing=true;renderChat();
   try{
